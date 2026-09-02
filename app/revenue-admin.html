@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>GrowingSeeds — Revenue Admin</title>
+<!--
+  Phase 42 (item 7, Revenue module): standalone business-admin tool, its own
+  separate third role/login (per the client's explicit choice), backed by
+  the new `admin_accounts` table + business_admin_login/
+  business_admin_change_password/admin_revenue_stats RPCs
+  (phase42_crm_revenue_admin_roles migration). Independent from both the
+  Order Admin (users table) and CRM Admin (same admin_accounts table, a
+  different role row) accounts.
+  All figures are derived entirely from `orders` -- no new revenue/ledger
+  table was introduced; "active" license figures use the same
+  fulfilled_at + plan-duration (30/365 day) convention already used for the
+  Phase 42 admin order-log expiry display, just aggregated server-side.
+  No external charting library is loaded -- the monthly trend renders as a
+  small inline CSS bar chart to avoid adding another network dependency
+  (this project has hit repeat bugs from unreliable external CDN assets).
+-->
+<style>
+  :root {
+    --ink: #1F2937; --muted: #6B7280; --line: #E5E7EB; --bg: #F7F8FA;
+    --card: #FFFFFF; --brand: #047857; --brand-dark: #065F46;
+    --danger: #DC2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--ink);
+  }
+  .topbar {
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar h1 { font-size: 17px; margin: 0; }
+  .topbar h1 span { color: var(--brand); }
+  .btn {
+    border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600;
+    cursor: pointer; background: var(--brand); color: #fff;
+  }
+  .btn:hover { background: var(--brand-dark); }
+  .btn.secondary { background: #EEE; color: var(--ink); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  .center-wrap { max-width: 380px; margin: 60px auto; padding: 0 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: var(--muted); }
+  .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .error-box { background: #FEF2F2; color: var(--danger); border: 1px solid #FECACA; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .stat-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
+  .stat-card .value { font-size: 24px; font-weight: 800; color: var(--ink); }
+  .stat-card .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; padding: 8px 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  .bar-track { background: #F0FDF4; border-radius: 4px; height: 10px; width: 100%; overflow: hidden; }
+  .bar-fill { background: var(--brand); height: 100%; border-radius: 4px; }
+  [hidden] { display: none !important; }
+  .loading-row td { text-align: center; color: var(--muted); padding: 30px; }
+  .section-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="center-wrap">
+  <div class="card">
+    <h2 style="margin-top:0;">💰 Revenue Admin</h2>
+    <p class="hint" style="margin-bottom:16px;">GrowingSeeds business tool. Not part of the child-facing app.</p>
+    <div class="error-box" id="loginError"></div>
+    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+    <button class="btn" style="width:100%;" id="loginBtn" onclick="doLogin()">Log In</button>
+  </div>
+</div>
+
+<div id="changePwScreen" class="center-wrap" hidden>
+  <div class="card">
+    <h2 style="margin-top:0;">Set a New Password</h2>
+    <p class="hint" style="margin-bottom:16px;">First login requires setting your own password.</p>
+    <div class="error-box" id="changePwError"></div>
+    <div class="field"><label>Current (temporary) password</label><input type="password" id="oldPassword" autocomplete="current-password"></div>
+    <div class="field"><label>New password</label><input type="password" id="newPassword1" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm new password</label><input type="password" id="newPassword2" autocomplete="new-password"></div>
+    <button class="btn" style="width:100%;" id="changePwBtn" onclick="doChangePassword()">Set Password &amp; Continue</button>
+  </div>
+</div>
+
+<div id="dashScreen" hidden>
+  <div class="topbar">
+    <h1>💰 <span>Revenue</span> Dashboard</h1>
+    <div>
+      <button class="btn secondary" onclick="loadRevenue()">↻ Refresh</button>
+      <button class="btn secondary" onclick="doLogout()">Log Out</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="error-box" id="dashError"></div>
+    <div class="stat-grid" id="statGrid">
+      <div class="stat-card"><div class="label">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Active Plan Mix</div>
+      <div id="planMix">—</div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Revenue by Month (last 12 months)</div>
+      <table>
+        <thead><tr><th>Month</th><th>Collected</th><th>Fulfilled</th><th>Pending</th><th>Cancelled</th><th style="width:140px;">Trend</th></tr></thead>
+        <tbody id="monthlyRows"><tr class="loading-row"><td colspan="6">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://bcdlprxdipyyzbcbvkjn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_14Y2M40UW8PwftDLj76AbQ_YCn23yFY';
+const ROLE = 'Revenue Admin';
+const TOKEN_KEY = 'gs_revenue_admin_token_v1';
+const EMAIL_KEY = 'gs_revenue_admin_email_v1';
+
+let client = null;
+function getClient() {
+  if (client) return client;
+  client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return client;
+}
+
+async function hashPassword(email, password) {
+  const enc = new TextEncoder();
+  const data = enc.encode('gs-salt:' + (email || '').trim().toLowerCase() + ':' + password);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showScreen(id) {
+  ['loginScreen', 'changePwScreen', 'dashScreen'].forEach(s => {
+    document.getElementById(s).hidden = (s !== id);
+  });
+}
+function setError(elId, msg) {
+  const el = document.getElementById(elId);
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+let pendingEmail = null;
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  setError('loginError', null);
+  if (!email || !password) { setError('loginError', 'Enter both email and password.'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  try {
+    const hash = await hashPassword(email, password);
+    const { data, error } = await getClient().rpc('business_admin_login', {
+      p_email: email, p_password_hash: hash, p_role: ROLE
+    });
+    if (error) { setError('loginError', 'Incorrect email or password.'); return; }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row.must_change_password) {
+      pendingEmail = email;
+      showScreen('changePwScreen');
+      return;
+    }
+    sessionStorage.setItem(TOKEN_KEY, row.admin_token);
+    sessionStorage.setItem(EMAIL_KEY, email);
+    showScreen('dashScreen');
+    loadRevenue();
+  } catch (e) {
+    setError('loginError', "Couldn't log in right now -- please try again.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doChangePassword() {
+  setError('changePwError', null);
+  const oldPw = document.getElementById('oldPassword').value;
+  const p1 = document.getElementById('newPassword1').value;
+  const p2 = document.getElementById('newPassword2').value;
+  if (!oldPw || !p1 || !p2) { setError('changePwError', 'Fill in all fields.'); return; }
+  if (p1 !== p2) { setError('changePwError', 'New passwords do not match.'); return; }
+  if (p1.length < 8) { setError('changePwError', 'New password must be at least 8 characters.'); return; }
+  const btn = document.getElementById('changePwBtn');
+  btn.disabled = true;
+  try {
+    const oldHash = await hashPassword(pendingEmail, oldPw);
+    const newHash = await hashPassword(pendingEmail, p1);
+    const { data, error } = await getClient().rpc('business_admin_change_password', {
+      p_email: pendingEmail, p_role: ROLE, p_old_password_hash: oldHash, p_new_password_hash: newHash
+    });
+    if (error) { setError('changePwError', "That didn't work -- please try again."); return; }
+    const row = Array.isArray(data) ? data[0] : data;
+    sessionStorage.setItem(TOKEN_KEY, row.admin_token);
+    sessionStorage.setItem(EMAIL_KEY, pendingEmail);
+    showScreen('dashScreen');
+    loadRevenue();
+  } catch (e) {
+    setError('changePwError', "Couldn't set the new password -- please try again.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function doLogout() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) getClient().rpc('business_admin_logout', { p_admin_token: token, p_role: ROLE }).catch(() => {});
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(EMAIL_KEY);
+  showScreen('loginScreen');
+}
+
+function formatIdr(n) {
+  if (!n) return 'Rp0';
+  return 'Rp' + Number(n).toLocaleString('id-ID');
+}
+
+async function loadRevenue() {
+  setError('dashError', null);
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) { showScreen('loginScreen'); return; }
+  document.getElementById('statGrid').innerHTML = '<div class="stat-card"><div class="label">Loading…</div></div>';
+  document.getElementById('monthlyRows').innerHTML = '<tr class="loading-row"><td colspan="6">Loading…</td></tr>';
+  try {
+    const { data, error } = await getClient().rpc('admin_revenue_stats', { p_admin_token: token });
+    if (error) {
+      setError('dashError', 'Your session has expired -- please log in again.');
+      showScreen('loginScreen');
+      return;
+    }
+    renderStats(data);
+  } catch (e) {
+    setError('dashError', "Couldn't load revenue data -- please try again.");
+  }
+}
+
+function renderStats(stats) {
+  document.getElementById('statGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="label">Total Collected</div>
+      <div class="value">${formatIdr(stats.total_collected_idr)}</div>
+      <div class="sub">All-time, fulfilled orders</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active MRR</div>
+      <div class="value">${formatIdr(stats.active_mrr_idr)}</div>
+      <div class="sub">Monthly recurring, active licenses</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active ARR</div>
+      <div class="value">${formatIdr(stats.active_arr_idr)}</div>
+      <div class="sub">Annualized run rate</div>
+    </div>
+  `;
+
+  document.getElementById('planMix').innerHTML = `
+    <table><tbody>
+      <tr><td style="width:140px;">Monthly plan</td><td><b>${stats.active_monthly_plan_count}</b> active</td></tr>
+      <tr><td>Annual plan</td><td><b>${stats.active_annual_plan_count}</b> active</td></tr>
+    </tbody></table>
+  `;
+
+  const series = stats.monthly_series || [];
+  const maxRevenue = Math.max(1, ...series.map(m => m.fulfilled_revenue || 0));
+  const rowsHtml = series.length
+    ? series.map(m => `
+      <tr>
+        <td>${m.month}</td>
+        <td>${formatIdr(m.fulfilled_revenue)}</td>
+        <td>${m.fulfilled_count}</td>
+        <td>${m.pending_count}</td>
+        <td>${m.cancelled_count}</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:${Math.round((m.fulfilled_revenue || 0) / maxRevenue * 100)}%"></div></div></td>
+      </tr>
+    `).join('')
+    : '<tr class="loading-row"><td colspan="6">No order activity in the last 12 months.</td></tr>';
+  document.getElementById('monthlyRows').innerHTML = rowsHtml;
+}
+
+(function init() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) { showScreen('dashScreen'); loadRevenue(); }
+  else { showScreen('loginScreen'); }
+})();
+</script>
+</body>
+</html>

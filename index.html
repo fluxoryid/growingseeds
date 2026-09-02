@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GrowingSeeds — Shaping the Future Leaders</title>
+<meta name="description" content="GrowingSeeds: a colourful learning app for toddlers with 6 fun games, Play Together mode, and Fancy Analysis for parents. Free to install on Android and iPhone.">
+<meta name="theme-color" content="#FFE9CE">
+<link rel="icon" type="image/png" sizes="32x32" href="app/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@700;800;900&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  /* ---------- Phase 45: 24-theme system ----------
+     Tap the hero disc to spin it and cycle to a new random theme. Only the
+     site's global accent identity is theme-driven (background wash, the
+     accent color used across CTAs/nav/eyebrows, its darker pressed shade,
+     and the hero badge chip) -- deliberately NOT every hardcoded color in
+     the file, to keep 24 theme swaps low-risk rather than rewriting every
+     component's styling. Background is always a light pastel and ink stays
+     the same dark neutral in every theme, so contrast never regresses. */
+  :root {
+    --gs-bg: #FFE9CE;
+    --gs-accent: #4CAF7D;
+    --gs-accent-dark: #3D9C68;
+    --gs-badge-bg: #FFF3D6;
+    --gs-badge-text: #E65100;
+  }
+  body {
+    font-family: 'Fredoka', 'Nunito', -apple-system, sans-serif;
+    background: var(--gs-bg);
+    color: #3E2723;
+    overflow-x: hidden;
+    position: relative;
+    transition: background-color 0.6s ease;
+  }
+  a { color: inherit; text-decoration: none; }
+  .decor-bg {
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(255,213,79,0.35), transparent 42%),
+      radial-gradient(circle at 88% 12%, rgba(129,201,149,0.32), transparent 42%),
+      radial-gradient(circle at 18% 88%, rgba(100,181,246,0.3), transparent 46%),
+      radial-gradient(circle at 90% 82%, rgba(244,143,177,0.32), transparent 46%);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---------- Animated toddler-friendly background decorations ---------- */
+  .bg-decor { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .bg-decor span {
+    position: absolute; display: inline-block; opacity: 0.55; filter: saturate(1.05);
+    animation: floatDrift linear infinite;
+    will-change: transform;
+  }
+  @keyframes floatDrift {
+    0%   { transform: translateY(0) translateX(0) rotate(0deg); }
+    50%  { transform: translateY(-26px) translateX(14px) rotate(8deg); }
+    100% { transform: translateY(0) translateX(0) rotate(0deg); }
+  }
+  @keyframes driftAcross {
+    0%   { transform: translateX(-6vw); }
+    100% { transform: translateX(106vw); }
+  }
+  .bg-cloud { top: 8%; font-size: 44px; animation: driftAcross 46s linear infinite, floatDrift 7s ease-in-out infinite; }
+  .bg-cloud.c2 { top: 22%; font-size: 30px; animation-duration: 62s, 8s; animation-delay: -18s, 0s; }
+  .bg-cloud.c3 { top: 4%; font-size: 26px; animation-duration: 54s, 6s; animation-delay: -32s, 0s; }
+  .bg-twinkle { font-size: 20px; animation: floatDrift 4.5s ease-in-out infinite, twinkle 2.6s ease-in-out infinite; }
+  @keyframes twinkle { 0%,100% { opacity: 0.25; } 50% { opacity: 0.75; } }
+  main, header, section, footer, nav { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .bg-decor span { animation: none !important; }
+  }
+
+  /* ---------- Nav ---------- */
+  .site-nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,252,245,0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: 3px solid #EADEC7;
+  }
+  .site-nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; max-width: 1080px; margin: 0 auto; }
+  .site-nav-logo { height: 40px; }
+  .site-nav-actions { display: flex; align-items: center; gap: 10px; }
+  .music-toggle-btn {
+    background: #FFF3D6; border: 2px solid #F0D9A8; border-radius: 999px;
+    width: 40px; height: 40px; font-size: 17px; cursor: pointer;
+  }
+  .music-toggle-btn.playing { background: #E8F5EE; border-color: #A8DFC1; }
+  .nav-cta {
+    background: var(--gs-accent); color: #fff; font-weight: 800; font-size: 13.5px;
+    padding: 9px 18px; border-radius: 999px; box-shadow: 0 4px 12px rgba(76,175,125,0.35);
+    transition: background-color 0.6s ease;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 48px 20px 40px; text-align: center; }
+  .hero-logo { width: min(72vw, 300px); height: auto; margin: 0 auto 6px; display: block; }
+  .hero-badge {
+    display: inline-block; background: var(--gs-badge-bg); border: 2px solid #F0D9A8; color: var(--gs-badge-text);
+    font-weight: 800; font-size: 12.5px; padding: 5px 14px; border-radius: 999px; margin-bottom: 14px;
+    transition: background-color 0.6s ease, color 0.6s ease;
+  }
+  .hero h1 { font-family: 'Baloo 2', 'Fredoka', sans-serif; font-size: clamp(24px, 5vw, 40px); font-weight: 800; color: #3E2723; line-height: 1.25; max-width: 720px; margin: 0 auto 14px; }
+  .hero h1 span { color: var(--gs-accent); transition: color 0.6s ease; }
+  .hero p.sub { font-size: 15.5px; color: #6D5A4E; max-width: 540px; margin: 0 auto 26px; line-height: 1.6; }
+  .btn {
+    font-family: inherit; font-weight: 800; font-size: 14.5px; padding: 14px 26px;
+    border-radius: 999px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    transition: transform 0.15s ease;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: var(--gs-accent); color: #fff; box-shadow: 0 6px 16px rgba(76,175,125,0.35); transition: background-color 0.6s ease; }
+  .btn-android { background: #3DDC84; color: #073042; box-shadow: 0 6px 16px rgba(61,220,132,0.35); }
+  .btn-ios { background: #111; color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
+  .hero-disc-wrap { width: min(78vw, 340px); margin: 0 auto; position: relative; }
+  .hero-animal-art {
+    width: 100%; display: block; border-radius: 50%; box-shadow: 0 10px 30px rgba(62,39,35,0.18);
+    animation: heroBob 5s ease-in-out infinite;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s ease;
+  }
+  .hero-disc-wrap:active .hero-animal-art { transform: scale(0.97); }
+  .hero-animal-art.spinning { animation: heroBob 5s ease-in-out infinite, discSpin 0.8s cubic-bezier(0.33,1,0.68,1); }
+  @keyframes heroBob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
+  @keyframes discSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .hero-disc-hint {
+    display: block; text-align: center; font-size: 11px; font-weight: 700; color: #8D6E63;
+    margin-top: 10px; opacity: 0.85;
+  }
+
+  /* ---------- Phase 45 fix: glowing stars + firework sparks on every spin ---------- */
+  .disc-fx-layer { position: absolute; inset: -60px; pointer-events: none; overflow: visible; z-index: 5; }
+  .disc-star {
+    position: absolute; transform: translate(-50%, -50%);
+    opacity: 0; filter: drop-shadow(0 0 6px rgba(255, 215, 64, 0.85)) drop-shadow(0 0 2px rgba(255,255,255,0.9));
+    animation: discStarPop 1100ms ease-out forwards;
+  }
+  @keyframes discStarPop {
+    0%   { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) scale(0.2) rotate(0deg); }
+    25%  { opacity: 1; transform: translate(-50%, -50%) translate(calc(var(--tx) * 0.4), calc(var(--ty) * 0.4)) scale(1.15) rotate(40deg); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) scale(0.7) rotate(160deg); }
+  }
+  .disc-firework-particle {
+    position: absolute; width: 6px; height: 6px; border-radius: 50%; transform: translate(-50%, -50%);
+    opacity: 0; box-shadow: 0 0 6px 1px currentColor;
+    animation: discFireworkFly 850ms ease-out forwards;
+  }
+  @keyframes discFireworkFly {
+    0%   { opacity: 1; transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+    70%  { opacity: 0.9; }
+    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) scale(0.25); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .disc-star, .disc-firework-particle { animation: none !important; opacity: 0 !important; }
+  }
+
+  /* ---------- Section shell ---------- */
+  section { padding: 46px 20px; }
+  .section-head { text-align: center; max-width: 620px; margin: 0 auto 32px; }
+  .section-eyebrow { display: inline-block; font-size: 12px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--gs-accent); margin-bottom: 8px; transition: color 0.6s ease; }
+  .section-head h2 { font-family: 'Baloo 2', sans-serif; font-size: clamp(21px, 3.6vw, 30px); font-weight: 800; color: #3E2723; margin-bottom: 10px; }
+  .section-head p { font-size: 14.5px; color: #6D5A4E; line-height: 1.6; }
+  .section-alt { background: #FFFCF5; border-top: 3px solid #EADEC7; border-bottom: 3px solid #EADEC7; }
+
+  /* ---------- Games grid ---------- */
+  .games-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; max-width: 980px; margin: 0 auto; }
+  .game-card {
+    background: #fff; border: 3px solid #EADEC7; border-radius: 22px; padding: 22px 18px; text-align: center;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.04);
+  }
+  .game-card-icon {
+    width: 68px; height: 68px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 32px; margin: 0 auto 12px;
+  }
+  .game-card h3 { font-family: 'Baloo 2', sans-serif; font-size: 16.5px; font-weight: 800; margin-bottom: 6px; color: #3E2723; }
+  .game-card p { font-size: 12.5px; color: #6D5A4E; line-height: 1.5; }
+
+  /* ---------- Meet the Gang: interactive characters ---------- */
+  .gang-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
+  .gang-card {
+    background: #fff; border: 3px solid #EADEC7; border-radius: 20px; padding: 16px 10px; text-align: center;
+    cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease, box-shadow 0.12s ease; box-shadow: 0 4px 0 rgba(0,0,0,0.04);
+  }
+  .gang-card:active { transform: scale(0.93); }
+  .gang-card .gang-emoji { font-size: 42px; display: block; margin-bottom: 6px; transition: transform 0.35s ease; }
+  .gang-card.wiggling .gang-emoji { animation: gangWiggle 0.5s ease; }
+  @keyframes gangWiggle {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(-14deg) scale(1.12); }
+    40% { transform: rotate(11deg) scale(1.12); }
+    60% { transform: rotate(-8deg) scale(1.05); }
+    80% { transform: rotate(5deg) scale(1.05); }
+  }
+  .gang-card h4 { font-size: 13px; font-weight: 800; color: #4E3C33; margin-bottom: 2px; }
+  .gang-card .gang-hint { font-size: 10.5px; color: #A1887F; }
+  .gang-note { text-align: center; font-size: 11.5px; color: #8D6E63; margin-top: 18px; font-style: italic; }
+
+  /* ---------- Riddle Time ---------- */
+  .riddle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; max-width: 900px; margin: 0 auto; }
+  .riddle-card {
+    background: #fff; border: 3px dashed #F0C987; border-radius: 20px; padding: 18px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .riddle-q { font-weight: 800; font-size: 14px; color: #3E2723; margin-bottom: 8px; display: flex; gap: 8px; }
+  .riddle-a {
+    font-size: 13.5px; color: #4CAF7D; font-weight: 700; background: #E8F5EE; border-radius: 12px;
+    padding: 10px 12px; display: none;
+  }
+  .riddle-card.revealed .riddle-a { display: block; }
+  .riddle-tap-hint { font-size: 11px; color: #B08968; font-weight: 700; }
+  .riddle-card.revealed .riddle-tap-hint { display: none; }
+
+  /* ---------- Play Together / Fancy Analysis ---------- */
+  .together-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: center; max-width: 980px; margin: 0 auto; }
+  @media (max-width: 760px) { .together-layout { grid-template-columns: 1fr; } }
+  .together-copy h2 { font-family: 'Baloo 2', sans-serif; font-size: clamp(20px, 3.4vw, 27px); font-weight: 800; margin-bottom: 12px; color: #3E2723; }
+  .together-copy p { font-size: 14.5px; color: #6D5A4E; line-height: 1.7; margin-bottom: 14px; }
+  .together-feature-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .together-feature-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; color: #4E3C33; font-weight: 700; }
+  .together-feature-list li span.tick { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: #E8F5EE; color: var(--gs-accent-dark); display: flex; align-items: center; justify-content: center; font-size: 12px; transition: color 0.6s ease; }
+  .analysis-preview {
+    background: #fff; border: 3px solid #EADEC7; border-radius: 24px; padding: 22px; box-shadow: 0 6px 20px rgba(62,39,35,0.08);
+  }
+  .analysis-preview-title { font-weight: 800; font-size: 13.5px; color: #6D4C41; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+  .analysis-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .analysis-bar-label { font-size: 12px; font-weight: 700; color: #6D5A4E; width: 92px; flex-shrink: 0; }
+  .analysis-bar-track { flex: 1; height: 12px; background: #F0E6D6; border-radius: 8px; overflow: hidden; }
+  .analysis-bar-fill { height: 100%; border-radius: 8px; }
+  .analysis-note { font-size: 11.5px; color: #8D6E63; margin-top: 10px; font-style: italic; }
+
+  /* ---------- Family Star Jar / Badges / Weekly Recap ---------- */
+  .jar-layout { display: grid; grid-template-columns: 1fr 1.15fr; gap: 30px; max-width: 980px; margin: 0 auto; align-items: center; }
+  @media (max-width: 760px) { .jar-layout { grid-template-columns: 1fr; } }
+  .jar-card { background: #fff; border: 3px solid #EADEC7; border-radius: 24px; padding: 22px; text-align: center; }
+  .jar-visual { width: 120px; height: 150px; margin: 0 auto 12px; position: relative; }
+  .jar-visual .jar-glass {
+    position: absolute; inset: 0; border: 4px solid #C9B79C; border-top: none; border-radius: 0 0 20px 20px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,244,214,0.5) 100%);
+    overflow: hidden;
+  }
+  .jar-visual .jar-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 62%; background: linear-gradient(180deg,#FFD54F,#FFB300); }
+  .jar-visual .jar-lid { position: absolute; top: -8px; left: 12px; right: 12px; height: 14px; background: #C9B79C; border-radius: 6px; }
+  .jar-visual .jar-star { position: absolute; font-size: 15px; animation: floatDrift 3s ease-in-out infinite; }
+  .jar-card h3 { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+  .jar-card p { font-size: 12.5px; color: #6D5A4E; line-height: 1.5; }
+  .badges-strip { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
+  .badge-pill { background: #FFF3D6; border: 2px solid #F0D9A8; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 800; color: #8A5300; display: flex; align-items: center; gap: 5px; }
+  .recap-list { display: flex; flex-direction: column; gap: 10px; }
+  .recap-row { display: flex; align-items: center; gap: 12px; background: #FFF6E5; border-radius: 14px; padding: 12px 14px; }
+  .recap-row .recap-emoji { font-size: 22px; flex-shrink: 0; }
+  .recap-row .recap-text { font-size: 13px; font-weight: 700; color: #4E3C33; }
+  .recap-row .recap-sub { font-size: 11.5px; color: #8D6E63; font-weight: 500; }
+
+  /* ---------- Leaderboard / Achievers ---------- */
+  .lb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; margin: 0 auto; }
+  @media (max-width: 760px) { .lb-layout { grid-template-columns: 1fr; } }
+  .lb-card { background: #fff; border: 3px solid #EADEC7; border-radius: 22px; padding: 20px; }
+  .lb-card-title { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 15.5px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .lb-card-sub { font-size: 11.5px; color: #8D6E63; margin-bottom: 14px; }
+  .lb-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: #FFF6E5; margin-bottom: 6px; font-weight: 700; font-size: 13px; }
+  .lb-rank { width: 26px; text-align: center; }
+  .lb-name { flex: 1; color: #3E2723; }
+  .lb-stars { color: #E65100; }
+  .lb-loading, .lb-empty { text-align: center; font-size: 13px; color: #8A5300; padding: 18px 8px; font-weight: 600; }
+
+  /* ---------- Parent Zone: access, privacy, screen time, support ---------- */
+  .parent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; max-width: 980px; margin: 0 auto; }
+  .parent-card { background: #fff; border: 3px solid #EADEC7; border-radius: 22px; padding: 22px 20px; }
+  .parent-card .emoji { font-size: 30px; margin-bottom: 10px; }
+  .parent-card h3 { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 15.5px; margin-bottom: 8px; }
+  .parent-card p { font-size: 12.5px; color: #6D5A4E; line-height: 1.6; margin-bottom: 6px; }
+  .parent-card ul { margin: 6px 0 0 18px; font-size: 12.5px; color: #6D5A4E; line-height: 1.7; }
+
+  /* ---------- Install ---------- */
+  .install-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; max-width: 780px; margin: 0 auto; }
+  .install-card { background: #fff; border: 3px solid #EADEC7; border-radius: 22px; padding: 24px 20px; text-align: center; }
+  .install-card .emoji { font-size: 34px; margin-bottom: 10px; }
+  .install-card h3 { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+  .install-card p { font-size: 12.5px; color: #6D5A4E; margin-bottom: 16px; line-height: 1.5; }
+
+  /* ---------- Floating music player widget ---------- */
+  .music-widget {
+    position: fixed; right: 16px; bottom: 16px; z-index: 60;
+    background: #FFFDF8; border: 3px solid #EADEC7; border-radius: 999px;
+    padding: 8px 16px 8px 8px; display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 8px 22px rgba(62,39,35,0.18); max-width: 220px;
+  }
+  .music-widget-btn {
+    width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer; flex-shrink: 0;
+    background: var(--gs-accent); color: #fff; font-size: 16px; display: flex; align-items: center; justify-content: center;
+    transition: background-color 0.6s ease;
+  }
+  .music-widget-text { display: flex; flex-direction: column; overflow: hidden; }
+  .music-widget-title { font-size: 11px; font-weight: 800; color: #4E3C33; white-space: nowrap; }
+  .music-widget-eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; margin-top: 2px; }
+  .music-widget-eq span { width: 3px; background: var(--gs-accent); border-radius: 2px; height: 4px; opacity: 0.35; transition: background-color 0.6s ease; }
+  .music-widget.playing .music-widget-eq span { animation: eqBounce 0.9s ease-in-out infinite; opacity: 1; }
+  .music-widget-eq span:nth-child(1) { animation-delay: 0s; }
+  .music-widget-eq span:nth-child(2) { animation-delay: 0.15s; }
+  .music-widget-eq span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes eqBounce { 0%,100% { height: 3px; } 50% { height: 12px; } }
+  @media (max-width: 480px) { .music-widget-text { display: none; } .music-widget { padding: 8px; } }
+
+  /* ---------- Footer ---------- */
+  footer { padding: 30px 20px; text-align: center; }
+  footer .foot-logo { height: 26px; margin-bottom: 10px; opacity: 0.9; }
+  footer p { font-size: 12px; color: #8D6E63; }
+  footer .foot-links { display: flex; justify-content: center; gap: 16px; margin-top: 10px; font-size: 12.5px; font-weight: 700; color: var(--gs-accent); transition: color 0.6s ease; }
+</style>
+</head>
+<body class="decor-bg">
+
+<div class="bg-decor" aria-hidden="true">
+  <span class="bg-cloud" style="left:0;">☁️</span>
+  <span class="bg-cloud c2" style="left:0;">☁️</span>
+  <span class="bg-cloud c3" style="left:0;">☁️</span>
+  <span class="bg-twinkle" style="top:14%; left:8%;">⭐</span>
+  <span class="bg-twinkle" style="top:30%; left:92%; animation-delay:-1s;">✨</span>
+  <span class="bg-twinkle" style="top:60%; left:5%; animation-delay:-2s;">🌟</span>
+  <span class="bg-twinkle" style="top:78%; left:88%; animation-delay:-0.5s;">⭐</span>
+  <span class="bg-twinkle" style="top:46%; left:50%; animation-delay:-1.5s;">✨</span>
+</div>
+
+<nav class="site-nav">
+  <div class="site-nav-inner">
+    <img class="site-nav-logo" src="app/assets/images/growingseeds_logo.png" alt="GrowingSeeds">
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="hero-badge">🌱 Grow, play, and learn together &middot; Ages 2-6</span>
+    <h1>Learning that feels like <span>play</span>, for your little one and you</h1>
+    <p class="sub">GrowingSeeds is a colourful toddler learning app with 6 fun games, a Play Together mode you can enjoy side by side, and Fancy Analysis so you always know how your child is growing.</p>
+    <div class="hero-disc-wrap" id="heroDiscWrap">
+      <img class="hero-animal-art" id="heroDisc" src="app/assets/images/funny_animals.png" alt="GrowingSeeds animal friends -- tap to spin and play" role="button" tabindex="0" aria-label="Tap to spin the disc, play music, and change the site's theme">
+      <div class="disc-fx-layer" id="discFxLayer" aria-hidden="true"></div>
+    </div>
+    <span class="hero-disc-hint">👆 Tap the disc to spin, play music &amp; change the theme</span>
+  </div>
+</header>
+
+<section class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">6 games, one adventure</span>
+      <h2>Everything a curious toddler loves</h2>
+      <p>Every game is built around real early-learning skills: listening, counting, matching, and creativity — dressed up as play.</p>
+    </div>
+    <div class="games-grid">
+      <div class="game-card"><div class="game-card-icon" style="background:#E1F5FE;">🐾</div><h3>Wild Animal Sounds</h3><p>Tap an animal, hear its real sound, and learn its name.</p></div>
+      <div class="game-card"><div class="game-card-icon" style="background:#FFF3E0;">🎯</div><h3>Sound Quiz</h3><p>100 levels of "which animal made that sound?" challenges.</p></div>
+      <div class="game-card"><div class="game-card-icon" style="background:#E8F5E9;">🔢</div><h3>Let's Counting</h3><p>Count along with friendly animals, one to a hundred.</p></div>
+      <div class="game-card"><div class="game-card-icon" style="background:#F3E5F5;">🧠</div><h3>Memory</h3><p>Flip, match, and remember — a classic made toddler-sized.</p></div>
+      <div class="game-card"><div class="game-card-icon" style="background:#FFEBEE;">🧩</div><h3>Animal Puzzle</h3><p>Piece together adorable animal pictures, 5 grid sizes.</p></div>
+      <div class="game-card"><div class="game-card-icon" style="background:#FFF9C4;">🎨</div><h3>Drawing &amp; Colouring</h3><p>Free draw, colour, and save every masterpiece to "My Arts."</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">Say hello!</span>
+      <h2>Meet the Gang</h2>
+      <p>Tap a friend to hear their real sound — the very same voices your toddler already knows from the app.</p>
+    </div>
+    <div class="gang-grid" id="gangGrid">
+      <div class="gang-card" data-sound="app/assets/audio/animals/cow.mp3"><span class="gang-emoji">🐄</span><h4>Cow</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/rabbit.mp3"><span class="gang-emoji">🐰</span><h4>Rabbit</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/lion.mp3"><span class="gang-emoji">🦁</span><h4>Lion</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/elephant.mp3"><span class="gang-emoji">🐘</span><h4>Elephant</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/bear.mp3"><span class="gang-emoji">🐻</span><h4>Bear</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/penguin.mp3"><span class="gang-emoji">🐧</span><h4>Penguin</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/monkey.mp3"><span class="gang-emoji">🐒</span><h4>Monkey</h4><span class="gang-hint">tap me!</span></div>
+      <div class="gang-card" data-sound="app/assets/audio/animals/eagle.mp3"><span class="gang-emoji">🦅</span><h4>Eagle</h4><span class="gang-hint">tap me!</span></div>
+    </div>
+    <div class="gang-note">Every voice here is a real, licensed animal recording — the same friendly cast toddlers meet inside GrowingSeeds.</div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">Giggle break</span>
+      <h2>Riddle Time</h2>
+      <p>Tap a card to reveal the silly answer — perfect for reading together before or after playtime.</p>
+    </div>
+    <div class="riddle-grid" id="riddleGrid">
+      <div class="riddle-card"><div class="riddle-q">🐄 Why did the cow win an award?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">Because she was outstanding in her field! 🌾</div></div>
+      <div class="riddle-card"><div class="riddle-q">🐘 Why don't elephants use computers?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">They're afraid of the mouse! 🖱️</div></div>
+      <div class="riddle-card"><div class="riddle-q">🦁 What do you call a lion who loves fast food?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">A drive-through king! 🍔👑</div></div>
+      <div class="riddle-card"><div class="riddle-q">🐰 What did the rabbit say to the carrot?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">It's been nice gnawing you! 🥕</div></div>
+      <div class="riddle-card"><div class="riddle-q">🐧 Why do penguins carry fish in their beaks?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">Because they don't have pockets! 🐟</div></div>
+      <div class="riddle-card"><div class="riddle-q">🐒 Why did the monkey like the banana?</div><div class="riddle-tap-hint">Tap to see the answer</div><div class="riddle-a">Because it had appeal! 🍌</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="together-layout">
+      <div class="together-copy">
+        <span class="section-eyebrow">For parents, not just kids</span>
+        <h2>Play Together, and see it in Fancy Analysis</h2>
+        <p>Switch on Play Together to take turns with your child inside the same game — a real joint-media moment, not just screen time. Every session, solo or together, quietly rolls up into Fancy Analysis: a friendly breakdown of what your child is practicing and how they're progressing.</p>
+        <ul class="together-feature-list">
+          <li><span class="tick">✓</span> Take-turns Play Together mode across every game</li>
+          <li><span class="tick">✓</span> Solo vs. With-Parent time, tracked separately</li>
+          <li><span class="tick">✓</span> Weekly Winner Progress, so growth is easy to see</li>
+          <li><span class="tick">✓</span> A private Family Star Jar goal you fill in together</li>
+        </ul>
+      </div>
+      <div class="analysis-preview">
+        <div class="analysis-preview-title">📊 Fancy Analysis (illustrative preview)</div>
+        <div class="analysis-bar-row"><span class="analysis-bar-label">Listening</span><div class="analysis-bar-track"><div class="analysis-bar-fill" style="width:82%; background:#4CAF7D;"></div></div></div>
+        <div class="analysis-bar-row"><span class="analysis-bar-label">Counting</span><div class="analysis-bar-track"><div class="analysis-bar-fill" style="width:68%; background:#29B6F6;"></div></div></div>
+        <div class="analysis-bar-row"><span class="analysis-bar-label">Memory</span><div class="analysis-bar-track"><div class="analysis-bar-fill" style="width:74%; background:#AB47BC;"></div></div></div>
+        <div class="analysis-bar-row"><span class="analysis-bar-label">Creativity</span><div class="analysis-bar-track"><div class="analysis-bar-fill" style="width:90%; background:#FFA726;"></div></div></div>
+        <div class="analysis-note">A sample layout only — your own child's real Fancy Analysis lives inside the app, private to your family.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">Celebrate every win</span>
+      <h2>Badges, the Family Star Jar &amp; your Weekly Recap</h2>
+      <p>Every star earned in-app adds up to something bigger than a score — it fills a jar, unlocks a badge, and shows up in a friendly recap each week.</p>
+    </div>
+    <div class="jar-layout">
+      <div class="jar-card">
+        <div class="jar-visual">
+          <div class="jar-lid"></div>
+          <div class="jar-glass"><div class="jar-fill"></div></div>
+          <span class="jar-star" style="top:18%; left:30%;">⭐</span>
+          <span class="jar-star" style="top:34%; left:58%; animation-delay:-1s;">⭐</span>
+          <span class="jar-star" style="top:50%; left:22%; animation-delay:-2s;">⭐</span>
+        </div>
+        <h3>Family Star Jar</h3>
+        <p>A shared goal you set together — every star from every game tops up the jar, illustrative example shown here.</p>
+        <div class="badges-strip">
+          <span class="badge-pill">🏅 First Steps</span>
+          <span class="badge-pill">🎨 Little Artist</span>
+          <span class="badge-pill">🔥 7-Day Streak</span>
+          <span class="badge-pill">🧠 Memory Master</span>
+        </div>
+      </div>
+      <div class="jar-card" style="text-align:left;">
+        <h3 style="text-align:center; margin-bottom:14px;">📬 Sample Weekly Recap</h3>
+        <div class="recap-list">
+          <div class="recap-row"><span class="recap-emoji">⭐</span><div><div class="recap-text">42 stars earned this week</div><div class="recap-sub">Illustrative example — your family's real recap lives in the app</div></div></div>
+          <div class="recap-row"><span class="recap-emoji">🕹️</span><div><div class="recap-text">Most-played game: Wild Animal Sounds</div><div class="recap-sub">Switches every week based on real play</div></div></div>
+          <div class="recap-row"><span class="recap-emoji">👨‍👩‍👧</span><div><div class="recap-text">3 Play Together sessions logged</div><div class="recap-sub">Time spent playing side by side with a parent</div></div></div>
+          <div class="recap-row"><span class="recap-emoji">🆕</span><div><div class="recap-text">New badge unlocked: "7-Day Streak"</div><div class="recap-sub">Delivered right inside the app, no extra sign-up</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">Live from the app, updated weekly</span>
+      <h2>This week's stars</h2>
+      <p>Every family playing GrowingSeeds shows up here by first name only — never anything else about their account.</p>
+    </div>
+    <div class="lb-layout">
+      <div class="lb-card">
+        <div class="lb-card-title">🏆 Weekly Leaderboard</div>
+        <div class="lb-card-sub">Top 10 by stars earned this week, resets every Monday.</div>
+        <div id="lbList"><div class="lb-loading">Loading...</div></div>
+      </div>
+      <div class="lb-card">
+        <div class="lb-card-title">⭐ This Week's Star Achievers</div>
+        <div class="lb-card-sub">The same live weekly data, one more way to celebrate it.</div>
+        <div id="achieversList"><div class="lb-loading">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-alt">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">You're always in control</span>
+      <h2>For Parents</h2>
+      <p>GrowingSeeds is built parent-first: easy access to what matters, clear privacy, and healthy screen-time by design.</p>
+    </div>
+    <div class="parent-grid">
+      <div class="parent-card">
+        <div class="emoji">🔑</div>
+        <h3>Parent Access</h3>
+        <p>A simple parent gate keeps settings, Fancy Analysis, and Contact Us a tap away from you — and out of easy toddler reach.</p>
+      </div>
+      <div class="parent-card">
+        <div class="emoji">🔒</div>
+        <h3>Privacy First</h3>
+        <ul>
+          <li>No ads, ever</li>
+          <li>No public profile beyond a first name and star count</li>
+          <li>Your child's real Fancy Analysis is private to your family</li>
+        </ul>
+      </div>
+      <div class="parent-card">
+        <div class="emoji">⏱️</div>
+        <h3>Healthy Screen Time</h3>
+        <p>Play Together is designed to be shared, not solo scrolling — and Fancy Analysis is there to help you shape a healthy daily rhythm, not just rack up minutes.</p>
+      </div>
+      <div class="parent-card">
+        <div class="emoji">💬</div>
+        <h3>Support</h3>
+        <p>Questions, feedback, or a bug to report? Reach us anytime from the in-app Contact Us button — a real person reads every message.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="section-eyebrow">Get GrowingSeeds</span>
+      <h2>Play on any phone or tablet, free</h2>
+      <p>Install it once and it opens full-screen from your home screen, just like an app from a store — with no store required.</p>
+    </div>
+    <div class="install-grid">
+      <div class="install-card">
+        <div class="emoji">🤖</div>
+        <h3>Android (Chrome)</h3>
+        <p>One tap installs GrowingSeeds straight to your home screen.</p>
+        <a class="btn btn-android" href="app/install/android.html">Install Now</a>
+      </div>
+      <div class="install-card">
+        <div class="emoji">🍎</div>
+        <h3>iPhone / iPad (Safari)</h3>
+        <p>A quick 3-step Share-sheet walkthrough, animated and easy.</p>
+        <a class="btn btn-ios" href="app/install/ios.html">See How</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <img class="foot-logo" src="app/assets/images/growingseeds_logo.png" alt="GrowingSeeds">
+  <p>GrowingSeeds by FluxoryID &middot; 2026 &middot; A toddler learning app for ages 2-6</p>
+</footer>
+
+<div class="music-widget" id="musicWidget">
+  <button class="music-widget-btn" id="musicToggleBtn" onclick="toggleSiteMusic()" title="Toddler background music" aria-label="Play background music">▶️</button>
+  <div class="music-widget-text">
+    <span class="music-widget-title">Toddler Tunes</span>
+    <span class="music-widget-eq"><span></span><span></span><span></span></span>
+  </div>
+</div>
+
+<audio id="siteBgMusic" loop preload="none" src="app/assets/audio/bg/main_screen.mp3"></audio>
+
+<script>
+// Background music: no autoplay (every mobile browser blocks unmuted
+// autoplay before a user gesture anyway) -- a plain, honest toggle button
+// instead, same track already used and licensed for in-app background
+// music, so nothing new to source or clear rights on.
+// Fixed: this used to point at an external cdn.freesound.org "preview" URL,
+// which is an unauthenticated third-party link that can fail silently
+// (blocked, expired, CORS, offline) -- the .catch(()=>{}) below then hid
+// the failure entirely, so the button just looked broken with no feedback.
+// Now points at the same track already bundled locally under app/, so it
+// has no external dependency and works even with no network at all.
+function toggleSiteMusic() {
+  const el = document.getElementById('siteBgMusic');
+  const btn = document.getElementById('musicToggleBtn');
+  const widget = document.getElementById('musicWidget');
+  if (el.paused) {
+    el.volume = 0.35;
+    el.play().then(() => {
+      btn.textContent = '⏸️';
+      widget.classList.add('playing');
+    }).catch((err) => {
+      console.warn('Background music failed to play:', err);
+    });
+  } else {
+    el.pause();
+    btn.textContent = '▶️';
+    widget.classList.remove('playing');
+  }
+}
+
+// ---------- Phase 45 (fixed): spinning disc = start music (never stop it) + random theme + fireworks ----------
+// Tap the hero disc: it spins once, makes sure the shared background track
+// is PLAYING (starting it on the first tap; on every tap after that it's
+// simply left alone -- rotating the disc must never pause music that's
+// already going, per the reported bug where a second tap felt like it
+// "interrupted" playback), applies one freshly-chosen theme out of 24
+// (never immediately repeating the one currently showing), and spawns a
+// random burst of glowing stars + firework sparks around the disc. The
+// floating music-widget button is untouched by any of this and still works
+// as a normal independent play/pause toggle.
+function gsEnsureSiteMusicPlaying() {
+  const el = document.getElementById('siteBgMusic');
+  const btn = document.getElementById('musicToggleBtn');
+  const widget = document.getElementById('musicWidget');
+  if (!el || !el.paused) return; // already playing (or no audio element) -- leave it exactly as it is
+  el.volume = 0.35;
+  el.play().then(() => {
+    if (btn) btn.textContent = '⏸️';
+    if (widget) widget.classList.add('playing');
+  }).catch((err) => {
+    console.warn('Background music failed to play:', err);
+  });
+}
+
+// Random glowing stars + firework sparks, spawned fresh on every spin.
+// Counts, angles, distances, sizes, colors, and timing are all randomized
+// per tap so no two spins look identical. Elements are removed after their
+// animation finishes so the fx layer never accumulates stale nodes.
+const GS_STAR_EMOJI = ['⭐', '✨', '🌟', '💫'];
+const GS_FIREWORK_COLORS = ['#FF5252', '#FFD54F', '#4CAF7D', '#29B6F6', '#EC407A', '#AB47BC', '#FF7043', '#26C6DA'];
+
+function gsSpawnDiscStars(fxLayer) {
+  const starCount = 5 + Math.floor(Math.random() * 6); // 5-10 stars per spin
+  for (let i = 0; i < starCount; i++) {
+    const star = document.createElement('span');
+    star.className = 'disc-star';
+    star.textContent = GS_STAR_EMOJI[Math.floor(Math.random() * GS_STAR_EMOJI.length)];
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 40 + Math.random() * 100;
+    star.style.left = (45 + Math.random() * 10) + '%';
+    star.style.top = (45 + Math.random() * 10) + '%';
+    star.style.setProperty('--tx', (Math.cos(angle) * dist).toFixed(1) + 'px');
+    star.style.setProperty('--ty', (Math.sin(angle) * dist).toFixed(1) + 'px');
+    star.style.fontSize = (14 + Math.random() * 16).toFixed(0) + 'px';
+    star.style.animationDelay = Math.floor(Math.random() * 180) + 'ms';
+    fxLayer.appendChild(star);
+    setTimeout(() => star.remove(), 1500);
+  }
+}
+
+function gsSpawnDiscFireworks(fxLayer) {
+  const burstCount = 1 + Math.floor(Math.random() * 3); // 1-3 firework bursts per spin
+  for (let b = 0; b < burstCount; b++) {
+    const originX = 20 + Math.random() * 60; // % within the fx layer
+    const originY = 20 + Math.random() * 60;
+    const particleCount = 8 + Math.floor(Math.random() * 8);
+    const burstDelay = Math.floor(Math.random() * 260);
+    const color = GS_FIREWORK_COLORS[Math.floor(Math.random() * GS_FIREWORK_COLORS.length)];
+    for (let p = 0; p < particleCount; p++) {
+      const particle = document.createElement('span');
+      particle.className = 'disc-firework-particle';
+      const angle = (p / particleCount) * Math.PI * 2 + (Math.random() * 0.4 - 0.2);
+      const dist = 26 + Math.random() * 54;
+      particle.style.left = originX + '%';
+      particle.style.top = originY + '%';
+      particle.style.setProperty('--tx', (Math.cos(angle) * dist).toFixed(1) + 'px');
+      particle.style.setProperty('--ty', (Math.sin(angle) * dist).toFixed(1) + 'px');
+      particle.style.color = color;
+      particle.style.background = color;
+      particle.style.animationDelay = burstDelay + 'ms';
+      fxLayer.appendChild(particle);
+      setTimeout(() => particle.remove(), 1300 + burstDelay);
+    }
+  }
+}
+
+function gsSpawnDiscFx() {
+  const fxLayer = document.getElementById('discFxLayer');
+  if (!fxLayer) return;
+  gsSpawnDiscStars(fxLayer);
+  gsSpawnDiscFireworks(fxLayer);
+}
+const GS_THEMES = [
+  { name: 'Sunny Meadow',    bg: '#FFE9CE', accent: '#4CAF7D', accentDark: '#3D9C68', badgeBg: '#FFF3D6', badgeText: '#E65100' },
+  { name: 'Ocean Breeze',    bg: '#E3F6FB', accent: '#1E88E5', accentDark: '#1565C0', badgeBg: '#D6F0FA', badgeText: '#01579B' },
+  { name: 'Berry Patch',     bg: '#FCE4EC', accent: '#D81B60', accentDark: '#AD1457', badgeBg: '#FFF0F5', badgeText: '#AD1457' },
+  { name: 'Citrus Grove',    bg: '#FFF3D6', accent: '#FB8C00', accentDark: '#EF6C00', badgeBg: '#FFE9C6', badgeText: '#E65100' },
+  { name: 'Lavender Fields', bg: '#F1E8FB', accent: '#8E5FD1', accentDark: '#6E3FB0', badgeBg: '#EDE1FA', badgeText: '#5E35B1' },
+  { name: 'Coral Reef',      bg: '#FFEAE3', accent: '#FF7043', accentDark: '#E64A19', badgeBg: '#FFDCCF', badgeText: '#BF360C' },
+  { name: 'Minty Fresh',     bg: '#E1F7EE', accent: '#26A69A', accentDark: '#00897B', badgeBg: '#D3F5E7', badgeText: '#00695C' },
+  { name: 'Golden Hour',     bg: '#FFF6DE', accent: '#F9A825', accentDark: '#F57F17', badgeBg: '#FFEFC2', badgeText: '#E65100' },
+  { name: 'Blueberry Sky',   bg: '#E8ECFB', accent: '#5C6BC0', accentDark: '#3949AB', badgeBg: '#DEE3F9', badgeText: '#283593' },
+  { name: 'Rose Garden',     bg: '#FDEAF0', accent: '#EC407A', accentDark: '#C2185B', badgeBg: '#FBDCE7', badgeText: '#AD1457' },
+  { name: 'Forest Floor',    bg: '#EAF3E3', accent: '#558B2F', accentDark: '#33691E', badgeBg: '#DCEBCB', badgeText: '#33691E' },
+  { name: 'Peach Sorbet',    bg: '#FFEDE0', accent: '#FF8A65', accentDark: '#E64A19', badgeBg: '#FFDFC9', badgeText: '#D84315' },
+  { name: 'Grape Fizz',      bg: '#F0E5F7', accent: '#9C27B0', accentDark: '#7B1FA2', badgeBg: '#E9D6F3', badgeText: '#6A1B9A' },
+  { name: 'Sunflower',       bg: '#FFF8DA', accent: '#FBC02D', accentDark: '#F9A825', badgeBg: '#FFF0B0', badgeText: '#8A5300' },
+  { name: 'Arctic Ice',      bg: '#E9F5F8', accent: '#00ACC1', accentDark: '#00838F', badgeBg: '#D8EFF4', badgeText: '#006064' },
+  { name: 'Watermelon',      bg: '#FDEAEA', accent: '#E53935', accentDark: '#C62828', badgeBg: '#FBD9D9', badgeText: '#B71C1C' },
+  { name: 'Autumn Leaves',   bg: '#FBEEDD', accent: '#D2691E', accentDark: '#A0522D', badgeBg: '#F5DFC0', badgeText: '#8B4513' },
+  { name: 'Cotton Candy',    bg: '#FDECF4', accent: '#EF5DA8', accentDark: '#D6408C', badgeBg: '#FBDFEF', badgeText: '#C2185B' },
+  { name: 'Emerald Isle',    bg: '#E5F5EC', accent: '#2E9E6B', accentDark: '#227C53', badgeBg: '#D4EEE0', badgeText: '#1B5E3F' },
+  { name: 'Desert Bloom',    bg: '#FBEFE2', accent: '#C77B3E', accentDark: '#A0602C', badgeBg: '#F3DFC6', badgeText: '#8A4B23' },
+  { name: 'Plum Blossom',    bg: '#F3E8F0', accent: '#8E4585', accentDark: '#6D3466', badgeBg: '#EAD9E6', badgeText: '#5C2A55' },
+  { name: 'Tropical Punch',  bg: '#FFEEE8', accent: '#FF5252', accentDark: '#D32F2F', badgeBg: '#FFDCD1', badgeText: '#C62828' },
+  { name: 'Honeydew',        bg: '#F1F8E2', accent: '#8BC34A', accentDark: '#689F38', badgeBg: '#E4F1C9', badgeText: '#558B2F' },
+  { name: 'Bubblegum',       bg: '#FCEAFB', accent: '#E040FB', accentDark: '#AA00FF', badgeBg: '#F7D9F5', badgeText: '#8E24AA' },
+];
+let gsCurrentThemeIndex = 0;
+
+function gsApplyTheme(index) {
+  const t = GS_THEMES[index];
+  const root = document.documentElement.style;
+  root.setProperty('--gs-bg', t.bg);
+  root.setProperty('--gs-accent', t.accent);
+  root.setProperty('--gs-accent-dark', t.accentDark);
+  root.setProperty('--gs-badge-bg', t.badgeBg);
+  root.setProperty('--gs-badge-text', t.badgeText);
+  gsCurrentThemeIndex = index;
+}
+
+function gsPickNextThemeIndex() {
+  if (GS_THEMES.length <= 1) return 0;
+  let next;
+  do { next = Math.floor(Math.random() * GS_THEMES.length); } while (next === gsCurrentThemeIndex);
+  return next;
+}
+
+(function setupHeroDisc() {
+  const disc = document.getElementById('heroDisc');
+  if (!disc) return;
+  function spinPlayAndRetheme() {
+    disc.classList.remove('spinning');
+    void disc.offsetWidth; // restart animation reliably on rapid re-taps
+    disc.classList.add('spinning');
+    gsEnsureSiteMusicPlaying(); // starts music if it isn't already playing -- never pauses it
+    gsApplyTheme(gsPickNextThemeIndex());
+    gsSpawnDiscFx(); // random glowing stars + firework sparks, every spin
+  }
+  disc.addEventListener('click', spinPlayAndRetheme);
+  disc.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); spinPlayAndRetheme(); }
+  });
+  disc.addEventListener('animationend', (e) => {
+    if (e.animationName === 'discSpin') disc.classList.remove('spinning');
+  });
+})();
+
+// Meet the Gang: tap-to-wiggle-and-hear interactive characters.
+// Fixed (Phase 45): this used to point at unauthenticated third-party
+// cdn.freesound.org preview URLs that did NOT match the app's real sounds --
+// contradicting this section's own copy ("the very same voices your toddler
+// already knows from the app"). Now every card points at the exact same
+// bundled local file the game itself plays (app/assets/audio/animals/*.mp3,
+// see the ANIMALS catalog in app/index.html) -- genuinely the same sound,
+// and with no external dependency to fail silently.
+(function setupGang() {
+  const cards = document.querySelectorAll('.gang-card');
+  let currentAudio = null;
+  cards.forEach((card) => {
+    card.addEventListener('click', () => {
+      const url = card.getAttribute('data-sound');
+      card.classList.remove('wiggling');
+      void card.offsetWidth; // restart animation reliably on rapid re-taps
+      card.classList.add('wiggling');
+      if (currentAudio) { currentAudio.pause(); }
+      try {
+        currentAudio = new Audio(url);
+        currentAudio.volume = 0.7;
+        currentAudio.play().catch(() => {});
+      } catch (e) { /* audio not available -- wiggle still plays */ }
+    });
+    card.addEventListener('animationend', (e) => {
+      if (e.animationName === 'gangWiggle') card.classList.remove('wiggling');
+    });
+  });
+})();
+
+// Riddle Time: tap a card to reveal its answer.
+(function setupRiddles() {
+  document.querySelectorAll('.riddle-card').forEach((card) => {
+    card.addEventListener('click', () => card.classList.toggle('revealed'));
+  });
+})();
+
+// Live weekly leaderboard -- same read-only get_weekly_leaderboard() RPC
+// the app itself uses (rank + child_name + stars only, no other account
+// data is ever returned by that function).
+const GS_SUPABASE_URL = 'https://bcdlprxdipyyzbcbvkjn.supabase.co';
+const GS_SUPABASE_KEY = 'sb_publishable_14Y2M40UW8PwftDLj76AbQ_YCn23yFY';
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+async function loadSiteLeaderboard() {
+  const lbList = document.getElementById('lbList');
+  const achieversList = document.getElementById('achieversList');
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    lbList.innerHTML = '<div class="lb-empty">Leaderboard needs an internet connection to load.</div>';
+    achieversList.innerHTML = '<div class="lb-empty">Achievers need an internet connection to load.</div>';
+    return;
+  }
+  try {
+    const client = supabase.createClient(GS_SUPABASE_URL, GS_SUPABASE_KEY);
+    const { data, error } = await client.rpc('get_weekly_leaderboard');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      lbList.innerHTML = '<div class="lb-empty">No stars earned yet this week — be the first! ⭐</div>';
+      achieversList.innerHTML = '<div class="lb-empty">Check back once this week\'s play begins!</div>';
+      return;
+    }
+    const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+    lbList.innerHTML = data.map(row => `
+      <div class="lb-row">
+        <span class="lb-rank">${medals[row.rank] || ('#' + row.rank)}</span>
+        <span class="lb-name">${escapeHtml(row.child_name)}</span>
+        <span class="lb-stars">⭐ ${row.stars}</span>
+      </div>`).join('');
+    // "Achievers" reuses this same live feed (top 5) -- this is the only
+    // public, privacy-safe read this app's backend exposes; framed as a
+    // celebration view rather than a duplicate leaderboard.
+    achieversList.innerHTML = data.slice(0, 5).map(row => `
+      <div class="lb-row">
+        <span class="lb-rank">🎉</span>
+        <span class="lb-name">${escapeHtml(row.child_name)}</span>
+        <span class="lb-stars">${row.stars} stars this week</span>
+      </div>`).join('');
+  } catch (e) {
+    lbList.innerHTML = '<div class="lb-empty">Couldn\'t load the leaderboard right now — try again shortly.</div>';
+    achieversList.innerHTML = '<div class="lb-empty">Couldn\'t load achievers right now — try again shortly.</div>';
+  }
+}
+loadSiteLeaderboard();
+
+// Defensive cleanup: this page has never registered its own service worker,
+// but a visitor's browser may still be controlled by a stale one left over
+// from an earlier GrowingSeeds deployment on this same origin/scope (a
+// service worker persists across visits once installed, unlike a normal
+// browser tab). If a rogue/outdated worker is intercepting navigation here
+// -- the classic symptom is "works in a fresh/incognito tab, misbehaves in
+// the regular browser profile" -- unregistering it clears the problem for
+// that visitor without them needing to manually clear site data.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((reg) => { reg.unregister(); });
+  }).catch(() => { /* best-effort; never block page load on this */ });
+}
+</script>
+
+</body>
+</html>

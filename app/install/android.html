@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install GrowingSeeds — Android</title>
+<meta name="theme-color" content="#FFE9CE">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icons/favicon-32.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: #FFE9CE; font-family: 'Fredoka', system-ui, -apple-system, sans-serif;
+    color: #3E2723; padding: 32px 24px;
+  }
+  .icon { width: 112px; height: 112px; border-radius: 26px; box-shadow: 0 8px 24px rgba(62,39,35,0.18); margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+  p.sub { font-size: 14px; color: #6D5A4E; margin: 0 0 28px; max-width: 320px; line-height: 1.5; }
+  #installBtn {
+    background: #4CAF7D; color: #fff; border: none; border-radius: 999px;
+    font-size: 17px; font-weight: 800; padding: 16px 40px; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(76,175,125,0.35); font-family: inherit;
+    transition: transform 0.15s ease;
+  }
+  #installBtn:active { transform: scale(0.96); }
+  #installBtn:disabled { opacity: 0.55; cursor: default; }
+  .status { margin-top: 22px; font-size: 13px; color: #6D5A4E; min-height: 18px; }
+  .wrong-platform {
+    display: none; background: #FFF3D6; border: 1px solid #F0D9A8; border-radius: 14px;
+    padding: 14px 18px; font-size: 13px; color: #8D6E63; max-width: 320px; margin-top: 20px;
+  }
+  .wrong-platform a { color: #4CAF7D; font-weight: 700; }
+</style>
+</head>
+<body>
+  <img class="icon" src="../icons/icon-512.png" alt="GrowingSeeds icon">
+  <h1>Install GrowingSeeds</h1>
+  <p class="sub">Get the full-screen app on your Android home screen — works offline once installed, no browser bar.</p>
+
+  <button id="installBtn" disabled>Preparing install…</button>
+  <div class="status" id="status"></div>
+
+  <div class="wrong-platform" id="wrongPlatform">
+    Looks like you're not on Android Chrome. <a href="./ios.html">iPhone? Tap here instead</a>.
+  </div>
+
+<script>
+// Registers the same service worker the main app uses, from the same
+// manifest -- this is required for Chrome's install eligibility check to
+// pass on THIS page (see index.html's own PWA install comment block
+// for the full per-browser mechanics this mirrors).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('../sw.js').catch(() => {});
+}
+
+const btn = document.getElementById('installBtn');
+const statusEl = document.getElementById('status');
+const wrongPlatform = document.getElementById('wrongPlatform');
+
+function isRunningStandalone() {
+  try {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+      || window.navigator.standalone === true;
+  } catch (e) { return false; }
+}
+
+const ua = navigator.userAgent || '';
+const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+const isFirefox = /Firefox|FxiOS/.test(ua);
+
+let deferredPrompt = null;
+
+if (isRunningStandalone()) {
+  btn.style.display = 'none';
+  statusEl.textContent = "You're already using the installed app!";
+} else if (isIOS || isFirefox) {
+  // This browser will never fire beforeinstallprompt -- no point showing a
+  // dead "Preparing…" button. Point them at the right page/flow instead.
+  btn.style.display = 'none';
+  wrongPlatform.style.display = 'block';
+} else {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.disabled = false;
+    btn.textContent = 'Install Now';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    btn.style.display = 'none';
+    statusEl.textContent = 'Installed! Look for GrowingSeeds on your home screen.';
+  });
+
+  btn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    btn.disabled = true;
+    const promptEvent = deferredPrompt;
+    deferredPrompt = null;
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice.outcome !== 'accepted') {
+        statusEl.textContent = 'No worries — you can install any time.';
+        btn.disabled = false;
+        btn.textContent = 'Install Now';
+      }
+    } catch (e) {
+      statusEl.textContent = "Couldn't open the install dialog — try opening the app and using its Install banner instead.";
+    }
+  });
+
+  // Chrome only fires beforeinstallprompt after its own installability
+  // checks pass, which can take a moment (or, rarely, may have already
+  // fired/been withheld for this browser profile e.g. already dismissed
+  // too many times, or app already installed elsewhere). Give it a few
+  // seconds; if nothing arrives, offer the app link as a graceful fallback
+  // rather than leaving a dead "Preparing…" button on screen forever.
+  setTimeout(() => {
+    if (btn.disabled) {
+      statusEl.textContent = "Your browser hasn't offered an install prompt yet — try again in a moment.";
+    }
+  }, 6000);
+}
+</script>
+</body>
+</html>

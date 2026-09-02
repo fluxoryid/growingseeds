@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install GrowingSeeds — iPhone</title>
+<meta name="theme-color" content="#FFE9CE">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="icon" href="../icons/favicon-32.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh; display: flex; flex-direction: column;
+    align-items: center; text-align: center;
+    background: #FFE9CE; font-family: 'Fredoka', system-ui, -apple-system, sans-serif;
+    color: #3E2723; padding: 32px 24px 40px;
+  }
+  .icon { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 8px 24px rgba(62,39,35,0.18); margin-bottom: 16px; }
+  h1 { font-size: 21px; font-weight: 800; margin: 0 0 6px; }
+  p.sub { font-size: 14px; color: #6D5A4E; margin: 0 0 24px; max-width: 320px; line-height: 1.5; }
+  .not-ios {
+    display: none; background: #FFF3D6; border: 1px solid #F0D9A8; border-radius: 14px;
+    padding: 14px 18px; font-size: 13px; color: #8D6E63; max-width: 320px; margin: 16px 0 0;
+  }
+  .not-ios a { color: #4CAF7D; font-weight: 700; }
+  .steps { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 340px; }
+  .step {
+    display: flex; align-items: center; gap: 14px; background: #fff;
+    border-radius: 16px; padding: 14px 16px; box-shadow: 0 3px 10px rgba(62,39,35,0.08);
+    text-align: left;
+  }
+  .step-num {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: #4CAF7D; color: #fff; font-weight: 800; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-icon { flex: none; font-size: 26px; }
+  .step-text { font-size: 14px; line-height: 1.4; }
+  .step-text b { color: #4CAF7D; }
+  .share-icon-anim {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; background: #E8F5EE;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(76,175,125,0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(76,175,125,0); }
+  }
+</style>
+</head>
+<body>
+  <img class="icon" src="../icons/apple-touch-icon.png" alt="GrowingSeeds icon">
+  <h1>Install GrowingSeeds</h1>
+  <p class="sub">Apple only allows installing from <b>Safari</b> — 3 quick taps and it's on your home screen, full-screen, no address bar.</p>
+
+  <div class="not-ios" id="notIOS">
+    This install guide is for iPhone/iPad Safari. <a href="./android.html">On Android? Tap here instead</a>.
+  </div>
+
+  <div class="steps" id="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-icon"><span class="share-icon-anim">⬆️</span></div>
+      <div class="step-text">Tap the <b>Share</b> icon in Safari's toolbar (the square with an arrow, usually at the bottom of the screen)</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-icon">📜</div>
+      <div class="step-text">Scroll down the menu and tap <b>"Add to Home Screen"</b></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-icon">✅</div>
+      <div class="step-text">Tap <b>"Add"</b> in the top right — the GrowingSeeds icon appears on your home screen</div>
+    </div>
+  </div>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('../sw.js').catch(() => {});
+}
+const ua = navigator.userAgent || '';
+const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+if (!isIOS) {
+  document.getElementById('steps').style.display = 'none';
+  document.getElementById('notIOS').style.display = 'block';
+} else if (!isSafari) {
+  // iOS but a non-Safari browser (Chrome/Firefox on iOS) -- Apple blocks
+  // Add to Home Screen from every browser except Safari itself, no
+  // exceptions, so the steps above genuinely won't work here.
+  document.querySelector('.sub').innerHTML = 'You\'re on iPhone, but <b>not in Safari</b> — Apple only allows installing from Safari itself. Copy this link and open it in Safari to continue.';
+  document.getElementById('steps').style.display = 'none';
+}
+try {
+  if ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true) {
+    document.getElementById('steps').style.display = 'none';
+    document.querySelector('.sub').textContent = "You're already using the installed app!";
+  }
+} catch (e) {}
+</script>
+</body>
+</html>

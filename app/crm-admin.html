@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>GrowingSeeds — CRM Admin</title>
+<!--
+  Phase 42 (item 6, CRM module): standalone business-admin tool, deliberately
+  SEPARATE from app/index.html's login screen and from the Order Admin role
+  that lives there -- per the client's explicit choice ("its own third
+  role" / "separate login page/URL"). Backed by the new `admin_accounts`
+  table + business_admin_login/business_admin_change_password/
+  admin_list_customers/admin_add_customer_note/admin_list_customer_notes
+  RPCs (phase42_crm_revenue_admin_roles migration), NOT the `users` table
+  Order Admin uses -- so the same business email can hold this role and the
+  separate Revenue Admin role as independent accounts.
+  Not part of the toddler-facing app: plain business-tool styling on
+  purpose, no game assets, no install gate (this is never meant to be
+  "played" or installed).
+-->
+<style>
+  :root {
+    --ink: #1F2937; --muted: #6B7280; --line: #E5E7EB; --bg: #F7F8FA;
+    --card: #FFFFFF; --brand: #6D28D9; --brand-dark: #5B21B6;
+    --danger: #DC2626; --ok: #16A34A; --warn: #D97706;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--ink);
+  }
+  .topbar {
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar h1 { font-size: 17px; margin: 0; }
+  .topbar h1 span { color: var(--brand); }
+  .btn {
+    border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600;
+    cursor: pointer; background: var(--brand); color: #fff;
+  }
+  .btn:hover { background: var(--brand-dark); }
+  .btn.secondary { background: #EEE; color: var(--ink); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+  .center-wrap { max-width: 380px; margin: 60px auto; padding: 0 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: var(--muted); }
+  .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .error-box { background: #FEF2F2; color: var(--danger); border: 1px solid #FECACA; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; padding: 8px 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 1px solid var(--line); }
+  td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr.customer-row { cursor: pointer; }
+  tr.customer-row:hover { background: #FAFAFB; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .badge-active { background: #DCFCE7; color: #166534; }
+  .badge-expired { background: #FEE2E2; color: #991B1B; }
+  .badge-none { background: #F3F4F6; color: #6B7280; }
+  .searchbar { margin-bottom: 14px; }
+  .searchbar input { width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .notes-panel { display: none; background: #FAFAFB; border-top: 1px dashed var(--line); }
+  .notes-panel.open { display: table-row; }
+  .notes-panel td { padding: 14px 10px; }
+  .note-item { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; }
+  .note-item .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .tag-chip { display: inline-block; background: #EDE9FE; color: var(--brand-dark); font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 6px; }
+  .note-form { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .note-form input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+  .note-form input.tag-input { flex: 0 0 120px; }
+  [hidden] { display: none !important; }
+  .loading-row td { text-align: center; color: var(--muted); padding: 30px; }
+  /* Phase 44: Customer Report / Upcoming Birthdays / Greeting Card Designer */
+  .tabbar { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tabbar button { border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 8px; padding: 8px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .tabbar button.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .stat-card .num { font-size: 24px; font-weight: 800; }
+  .stat-card .lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge-recurring { background: #DCFCE7; color: #166534; }
+  .badge-one-time { background: #F3F4F6; color: #6B7280; }
+  .badge-soon { background: #FEF3C7; color: #92400E; }
+  .days-ahead-field { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 13.5px; }
+  .days-ahead-field input { width: 70px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; }
+  .card-modal-backdrop { position: fixed; inset: 0; background: rgba(17,24,39,0.55); display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px; z-index: 50; }
+  .card-modal-backdrop.active { display: flex; }
+  .card-modal { background: #fff; border-radius: 14px; max-width: 880px; width: 100%; padding: 22px; }
+  .card-modal h3 { margin-top: 0; }
+  .card-designer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 700px) { .card-designer-grid { grid-template-columns: 1fr; } }
+  .template-swatches { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .template-swatch { width: 64px; height: 86px; border-radius: 8px; cursor: pointer; border: 3px solid transparent; }
+  .template-swatch.selected { border-color: var(--brand); }
+  .icon-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .icon-picker button { font-size: 20px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .icon-picker button.selected { border-color: var(--brand); background: #EDE9FE; }
+  .field textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 60px; }
+  #cardCanvas { width: 100%; max-width: 320px; border-radius: 12px; border: 1px solid var(--line); display: block; margin: 0 auto; }
+  .canva-alt-box { background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 10px; padding: 12px 14px; margin-top: 14px; font-size: 13px; }
+  .canva-alt-box a { color: var(--brand-dark); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="center-wrap">
+  <div class="card">
+    <h2 style="margin-top:0;">🗂️ CRM Admin</h2>
+    <p class="hint" style="margin-bottom:16px;">GrowingSeeds business tool. Not part of the child-facing app.</p>
+    <div class="error-box" id="loginError"></div>
+    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+    <button class="btn" style="width:100%;" id="loginBtn" onclick="doLogin()">Log In</button>
+  </div>
+</div>
+
+<div id="changePwScreen" class="center-wrap" hidden>
+  <div class="card">
+    <h2 style="margin-top:0;">Set a New Password</h2>
+    <p class="hint" style="margin-bottom:16px;">First login requires setting your own password.</p>
+    <div class="error-box" id="changePwError"></div>
+    <div class="field"><label>Current (temporary) password</label><input type="password" id="oldPassword" autocomplete="current-password"></div>
+    <div class="field"><label>New password</label><input type="password" id="newPassword1" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm new password</label><input type="password" id="newPassword2" autocomplete="new-password"></div>
+    <button class="btn" style="width:100%;" id="changePwBtn" onclick="doChangePassword()">Set Password &amp; Continue</button>
+  </div>
+</div>
+
+<div id="dashScreen" hidden>
+  <div class="topbar">
+    <h1>🗂️ <span>CRM</span> — Customer Directory</h1>
+    <div>
+      <button class="btn secondary" onclick="loadCustomers()">↻ Refresh</button>
+      <button class="btn secondary" onclick="doLogout()">Log Out</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="error-box" id="dashError"></div>
+    <div class="tabbar">
+      <button id="tabBtn-directory" class="active" onclick="switchTab('directory')">Customer Directory</button>
+      <button id="tabBtn-report" onclick="switchTab('report')">Recurring vs Non-Recurring</button>
+      <button id="tabBtn-birthdays" onclick="switchTab('birthdays')">🎂 Birthdays &amp; Cards</button>
+    </div>
+
+    <div id="panel-directory">
+      <div class="searchbar">
+        <input type="text" id="searchBox" placeholder="Search by email or child name…" oninput="renderCustomers()">
+      </div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer</th><th>Plan</th><th>License</th><th>Total Paid</th><th>Signed Up</th><th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="customerRows">
+            <tr class="loading-row"><td colspan="6">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="panel-report" hidden>
+      <!-- Phase 44: recurring = 2+ FULFILLED (actually paid) orders --
+           confirmed with the client since this product is a fixed-term
+           license (monthly/annually), not an auto-renewing subscription,
+           so "recurring" means a genuine repeat purchase, not an
+           auto-charge. See admin_customer_recurrence_report(). -->
+      <div class="stat-cards" id="reportStatCards"></div>
+      <div class="searchbar">
+        <input type="text" id="reportSearchBox" placeholder="Search by email or child name…" oninput="renderReport()">
+      </div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th><th>Child Name</th><th>Status</th><th>Fulfilled Orders</th><th>Total Paid</th><th>First Purchase</th><th>Last Purchase</th>
+            </tr>
+          </thead>
+          <tbody id="reportRows">
+            <tr class="loading-row"><td colspan="7">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="panel-birthdays" hidden>
+      <!-- Phase 44: birthdate is already collected today via the live
+           app's own Profile screen (Settings -> Birthdate -> Save Profile
+           -> progress_sync -> device_progress.birthdate). This panel just
+           surfaces upcoming birthdays from that existing data, sorted
+           soonest-first, with a Design Card action per row. -->
+      <div class="days-ahead-field">
+        <label for="daysAheadInput">Show birthdays in the next</label>
+        <input type="number" id="daysAheadInput" value="60" min="1" max="365" onchange="loadBirthdays()">
+        <span>days</span>
+      </div>
+      <div class="card" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Child</th><th>Email</th><th>Birthdate</th><th>Turning</th><th>Next Birthday</th><th>Days Until</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="birthdayRows">
+            <tr class="loading-row"><td colspan="7">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">No birthdate on file yet for a family? They can add one in the app under Settings — it flows into this list automatically once saved.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 44: Greeting Card Designer. Two parts, deliberately built this
+     way rather than a single approach:
+     (1) A native, fully self-contained canvas-based designer below -- text,
+         icon, and photo-import all work reliably in the shipped static
+         site with no external account or live API call required at
+         runtime (nothing to break for the client later).
+     (2) A link out to two REAL Canva designs, actually created this phase
+         using the connected Canva account (AI-generated, kid-friendly,
+         GrowingSeeds-styled birthday card layouts) as a professional
+         starting point Tommi can personalize with a real photo/text
+         directly in Canva's own editor and export from there. This is the
+         genuine "Canva collaboration" -- see the project doc for why a
+         live, runtime Canva API integration isn't safely deployable inside
+         this static PWA (it would need Canva OAuth credentials held by a
+         server this project doesn't have) -- shown here as option (2) for
+         the times a fully custom, professionally hand-finished card beats
+         the quick in-app one.
+-->
+<div class="card-modal-backdrop" id="cardDesignerModal">
+  <div class="card-modal">
+    <h3>🎉 Greeting Card Designer</h3>
+    <div class="card-designer-grid">
+      <div>
+        <div class="field"><label>Template</label></div>
+        <div class="template-swatches" id="templateSwatches"></div>
+        <div class="field"><label>Headline</label><input type="text" id="cardHeadline"></div>
+        <div class="field"><label>Message</label><textarea id="cardMessage"></textarea></div>
+        <div class="field"><label>Accent Icon</label></div>
+        <div class="icon-picker" id="iconPicker"></div>
+        <div class="field"><label>Photo (optional)</label><input type="file" id="cardPhotoInput" accept="image/png,image/jpeg,image/webp" onchange="onCardPhotoSelected(event)"></div>
+        <div class="canva-alt-box">
+          Prefer a fully custom, hand-finished card? Open one of these real Canva designs (made for GrowingSeeds), drop in a photo and your own text right in Canva, then export from there:<br>
+          <a href="https://www.canva.com/d/UAlBvcLQYMrDTdk" target="_blank" rel="noopener">Open "Card - Happy Birthday!" in Canva →</a><br>
+          <a href="https://www.canva.com/d/B7ZyZ3XZu92LBW9" target="_blank" rel="noopener">Open "Pastel Birthday Card with 3D Animals" in Canva →</a>
+        </div>
+      </div>
+      <div>
+        <canvas id="cardCanvas" width="600" height="800"></canvas>
+        <div style="text-align:center; margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+          <button class="btn" onclick="saveAndDownloadCard()">💾 Save &amp; Download PNG</button>
+          <button class="btn secondary" onclick="closeCardDesigner()">Close</button>
+        </div>
+        <div class="hint" id="cardSaveMsg" style="text-align:center; margin-top:6px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://bcdlprxdipyyzbcbvkjn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_14Y2M40UW8PwftDLj76AbQ_YCn23yFY';
+const ROLE = 'CRM Admin';
+const TOKEN_KEY = 'gs_crm_admin_token_v1';
+const EMAIL_KEY = 'gs_crm_admin_email_v1';
+
+let client = null;
+function getClient() {
+  if (client) return client;
+  client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return client;
+}
+
+async function hashPassword(email, password) {
+  const enc = new TextEncoder();
+  const data = enc.encode('gs-salt:' + (email || '').trim().toLowerCase() + ':' + password);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// QA fix (Phase 42 QA pass): child_name, email, and note/tag text are all
+// free text (child_name comes from the parent's own Profile tab; notes/tags
+// are typed by whichever CRM Admin is logged in) and were being interpolated
+// directly into innerHTML template strings elsewhere in this file. That's a
+// stored-HTML-injection risk -- e.g. a note containing an inline script tag
+// would execute in the CRM Admin's own browser next time that family's notes
+// panel is opened, with access to that admin's own sessionStorage token.
+// escapeHtml() is used everywhere one of those fields is placed into HTML.
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+// For embedding a value as the argument of an inline onclick="fn('...')"
+// call: escapes it as an HTML attribute AND as the single-quoted JS string
+// literal it sits inside, so a stray quote/backslash in an email can't break
+// out of either context.
+function escapeJsAttr(s) {
+  return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
+function showScreen(id) {
+  ['loginScreen', 'changePwScreen', 'dashScreen'].forEach(s => {
+    document.getElementById(s).hidden = (s !== id);
+  });
+}
+function setError(elId, msg) {
+  const el = document.getElementById(elId);
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+let pendingEmail = null;
+let pendingOldHash = null;
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  setError('loginError', null);
+  if (!email || !password) { setError('loginError', 'Enter both email and password.'); return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  try {
+    const hash = await hashPassword(email, password);
+    const { data, error } = await getClient().rpc('business_admin_login', {
+      p_email: email, p_password_hash: hash, p_role: ROLE
+    });
+    if (error) {
+      setError('loginError', 'Incorrect email or password.');
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row.must_change_password) {
+      pendingEmail = email;
+      pendingOldHash = hash;
+      showScreen('changePwScreen');
+      return;
+    }
+    sessionStorage.setItem(TOKEN_KEY, row.admin_token);
+    sessionStorage.setItem(EMAIL_KEY, email);
+    showScreen('dashScreen');
+    loadCustomers();
+  } catch (e) {
+    setError('loginError', "Couldn't log in right now -- please try again.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doChangePassword() {
+  setError('changePwError', null);
+  const oldPw = document.getElementById('oldPassword').value;
+  const p1 = document.getElementById('newPassword1').value;
+  const p2 = document.getElementById('newPassword2').value;
+  if (!oldPw || !p1 || !p2) { setError('changePwError', 'Fill in all fields.'); return; }
+  if (p1 !== p2) { setError('changePwError', 'New passwords do not match.'); return; }
+  if (p1.length < 8) { setError('changePwError', 'New password must be at least 8 characters.'); return; }
+  const btn = document.getElementById('changePwBtn');
+  btn.disabled = true;
+  try {
+    const oldHash = await hashPassword(pendingEmail, oldPw);
+    const newHash = await hashPassword(pendingEmail, p1);
+    const { data, error } = await getClient().rpc('business_admin_change_password', {
+      p_email: pendingEmail, p_role: ROLE, p_old_password_hash: oldHash, p_new_password_hash: newHash
+    });
+    if (error) { setError('changePwError', "That didn't work -- please try again."); return; }
+    const row = Array.isArray(data) ? data[0] : data;
+    sessionStorage.setItem(TOKEN_KEY, row.admin_token);
+    sessionStorage.setItem(EMAIL_KEY, pendingEmail);
+    showScreen('dashScreen');
+    loadCustomers();
+  } catch (e) {
+    setError('changePwError', "Couldn't set the new password -- please try again.");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function doLogout() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) getClient().rpc('business_admin_logout', { p_admin_token: token, p_role: ROLE }).catch(() => {});
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(EMAIL_KEY);
+  showScreen('loginScreen');
+}
+
+const PLAN_DAYS = { monthly: 30, annually: 365 };
+function computeLicenseBadge(row) {
+  if (!row.license_activated_at) return { label: 'Not Issued', cls: 'badge-none' };
+  const activated = new Date(row.license_activated_at);
+  const days = PLAN_DAYS[row.latest_plan] || 30;
+  const expires = new Date(activated.getTime() + days * 86400000);
+  return expires.getTime() > Date.now()
+    ? { label: 'Active', cls: 'badge-active' }
+    : { label: 'Expired', cls: 'badge-expired' };
+}
+function formatIdr(n) {
+  if (!n) return 'Rp0';
+  return 'Rp' + Number(n).toLocaleString('id-ID');
+}
+
+let allCustomers = [];
+let openNoteRow = null;
+
+async function loadCustomers() {
+  setError('dashError', null);
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) { showScreen('loginScreen'); return; }
+  document.getElementById('customerRows').innerHTML = '<tr class="loading-row"><td colspan="6">Loading…</td></tr>';
+  try {
+    const { data, error } = await getClient().rpc('admin_list_customers', { p_admin_token: token });
+    if (error) {
+      setError('dashError', 'Your session has expired -- please log in again.');
+      showScreen('loginScreen');
+      return;
+    }
+    allCustomers = data || [];
+    renderCustomers();
+  } catch (e) {
+    setError('dashError', "Couldn't load customers -- please try again.");
+  }
+}
+
+function renderCustomers() {
+  const q = (document.getElementById('searchBox').value || '').trim().toLowerCase();
+  const rows = allCustomers.filter(c =>
+    !q || (c.user_email || '').toLowerCase().includes(q) || (c.child_name || '').toLowerCase().includes(q)
+  );
+  const tbody = document.getElementById('customerRows');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="6">No customers found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((c, i) => {
+    const lic = computeLicenseBadge(c);
+    const plan = c.latest_plan ? (c.latest_plan === 'monthly' ? 'Monthly' : 'Annually') : '—';
+    const signup = c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID') : '—';
+    const emailAttr = escapeJsAttr(c.user_email);
+    return `
+    <tr class="customer-row" onclick="toggleNotes('${emailAttr}')">
+      <td><b>${escapeHtml(c.child_name) || '(no name)'}</b><br><span style="color:var(--muted); font-size:12px;">${escapeHtml(c.user_email)}</span></td>
+      <td>${plan}</td>
+      <td><span class="badge ${lic.cls}">${lic.label}</span></td>
+      <td>${formatIdr(c.total_paid_idr)}</td>
+      <td>${signup}</td>
+      <td>${c.note_count > 0 ? c.note_count : '—'}</td>
+    </tr>
+    <tr class="notes-panel" id="notes-${cssId(c.user_email)}">
+      <td colspan="6">
+        <div id="notesList-${cssId(c.user_email)}">Loading notes…</div>
+        <div class="note-form">
+          <input type="text" class="tag-input" placeholder="Tag (optional)" id="tagInput-${cssId(c.user_email)}">
+          <input type="text" placeholder="Add a note about this family…" id="noteInput-${cssId(c.user_email)}">
+          <button class="btn" onclick="event.stopPropagation(); addNote('${emailAttr}')">Add Note</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function cssId(email) { return email.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+async function toggleNotes(email) {
+  const rowId = 'notes-' + cssId(email);
+  const el = document.getElementById(rowId);
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.notes-panel.open').forEach(p => p.classList.remove('open'));
+  if (isOpen) { openNoteRow = null; return; }
+  el.classList.add('open');
+  openNoteRow = email;
+  await loadNotes(email);
+}
+
+async function loadNotes(email) {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const listEl = document.getElementById('notesList-' + cssId(email));
+  try {
+    const { data, error } = await getClient().rpc('admin_list_customer_notes', { p_admin_token: token, p_user_email: email });
+    if (error) { listEl.textContent = "Couldn't load notes."; return; }
+    if (!data || !data.length) { listEl.innerHTML = '<div class="hint">No notes yet.</div>'; return; }
+    listEl.innerHTML = data.map(n => `
+      <div class="note-item">
+        ${escapeHtml(n.note_text)}${n.tag ? `<span class="tag-chip">${escapeHtml(n.tag)}</span>` : ''}
+        <div class="meta">${escapeHtml(n.created_by)} · ${new Date(n.created_at).toLocaleString('id-ID')}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    listEl.textContent = "Couldn't load notes.";
+  }
+}
+
+async function addNote(email) {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const noteInput = document.getElementById('noteInput-' + cssId(email));
+  const tagInput = document.getElementById('tagInput-' + cssId(email));
+  const text = noteInput.value.trim();
+  if (!text) return;
+  try {
+    const { error } = await getClient().rpc('admin_add_customer_note', {
+      p_admin_token: token, p_user_email: email, p_note: text, p_tag: tagInput.value.trim() || null
+    });
+    if (error) { alert("Couldn't save the note -- please try again."); return; }
+    noteInput.value = '';
+    tagInput.value = '';
+    await loadNotes(email);
+    loadCustomers();
+  } catch (e) {
+    alert("Couldn't save the note -- please try again.");
+  }
+}
+
+// ---------- Phase 44: tabs ----------
+let reportLoaded = false;
+let birthdaysLoaded = false;
+function switchTab(tab) {
+  ['directory', 'report', 'birthdays'].forEach(t => {
+    document.getElementById('panel-' + t).hidden = (t !== tab);
+    document.getElementById('tabBtn-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'report' && !reportLoaded) loadReport();
+  if (tab === 'birthdays' && !birthdaysLoaded) loadBirthdays();
+}
+
+// ---------- Phase 44: Recurring vs Non-Recurring report ----------
+let allReportRows = [];
+async function loadReport() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) { showScreen('loginScreen'); return; }
+  document.getElementById('reportRows').innerHTML = '<tr class="loading-row"><td colspan="7">Loading…</td></tr>';
+  try {
+    const { data, error } = await getClient().rpc('admin_customer_recurrence_report', { p_admin_token: token });
+    if (error) { setError('dashError', 'Your session has expired -- please log in again.'); showScreen('loginScreen'); return; }
+    allReportRows = data || [];
+    reportLoaded = true;
+    renderReport();
+  } catch (e) {
+    document.getElementById('reportRows').innerHTML = '<tr class="loading-row"><td colspan="7">Couldn\'t load the report -- please try Refresh.</td></tr>';
+  }
+}
+
+function renderReport() {
+  const q = (document.getElementById('reportSearchBox').value || '').trim().toLowerCase();
+  const rows = allReportRows.filter(r =>
+    !q || (r.user_email || '').toLowerCase().includes(q) || (r.child_name || '').toLowerCase().includes(q)
+  );
+
+  const totalCustomers = allReportRows.length;
+  const recurringCount = allReportRows.filter(r => r.is_recurring).length;
+  const nonRecurringCount = totalCustomers - recurringCount;
+  const pct = totalCustomers ? Math.round((recurringCount / totalCustomers) * 100) : 0;
+  document.getElementById('reportStatCards').innerHTML = `
+    <div class="stat-card"><div class="num">${totalCustomers}</div><div class="lbl">Total Customers</div></div>
+    <div class="stat-card"><div class="num">${recurringCount}</div><div class="lbl">Recurring (2+ paid orders)</div></div>
+    <div class="stat-card"><div class="num">${nonRecurringCount}</div><div class="lbl">Non-Recurring (0-1 paid order)</div></div>
+    <div class="stat-card"><div class="num">${pct}%</div><div class="lbl">Recurring Rate</div></div>
+  `;
+
+  const tbody = document.getElementById('reportRows');
+  if (!rows.length) { tbody.innerHTML = '<tr class="loading-row"><td colspan="7">No customers found.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.user_email)}</td>
+      <td>${escapeHtml(r.child_name) || '(no name)'}</td>
+      <td><span class="badge ${r.is_recurring ? 'badge-recurring' : 'badge-one-time'}">${r.is_recurring ? 'Recurring' : 'Non-Recurring'}</span></td>
+      <td>${r.fulfilled_order_count}</td>
+      <td>${formatIdr(r.total_paid_idr)}</td>
+      <td>${r.first_fulfilled_at ? new Date(r.first_fulfilled_at).toLocaleDateString('id-ID') : '—'}</td>
+      <td>${r.last_fulfilled_at ? new Date(r.last_fulfilled_at).toLocaleDateString('id-ID') : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ---------- Phase 44: Upcoming Birthdays ----------
+let allBirthdayRows = [];
+async function loadBirthdays() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) { showScreen('loginScreen'); return; }
+  const daysAhead = parseInt(document.getElementById('daysAheadInput').value, 10) || 60;
+  document.getElementById('birthdayRows').innerHTML = '<tr class="loading-row"><td colspan="7">Loading…</td></tr>';
+  try {
+    const { data, error } = await getClient().rpc('admin_upcoming_birthdays', { p_admin_token: token, p_days_ahead: daysAhead });
+    if (error) { setError('dashError', 'Your session has expired -- please log in again.'); showScreen('loginScreen'); return; }
+    allBirthdayRows = data || [];
+    birthdaysLoaded = true;
+    renderBirthdays();
+  } catch (e) {
+    document.getElementById('birthdayRows').innerHTML = '<tr class="loading-row"><td colspan="7">Couldn\'t load birthdays -- please try again.</td></tr>';
+  }
+}
+
+function renderBirthdays() {
+  const tbody = document.getElementById('birthdayRows');
+  if (!allBirthdayRows.length) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="7">No birthdays in this window yet -- families add a birthdate in the app under Settings.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allBirthdayRows.map((b, i) => {
+    const soon = b.days_until <= 7;
+    const emailAttr = escapeJsAttr(b.user_email);
+    const nameAttr = escapeJsAttr(b.child_name || '');
+    return `
+    <tr>
+      <td><b>${escapeHtml(b.child_name) || '(no name)'}</b></td>
+      <td>${escapeHtml(b.user_email)}</td>
+      <td>${new Date(b.birthdate).toLocaleDateString('id-ID')}</td>
+      <td>Turning ${b.turning_age}</td>
+      <td>${new Date(b.next_birthday).toLocaleDateString('id-ID')}</td>
+      <td>${soon ? `<span class="badge badge-soon">${b.days_until === 0 ? 'Today!' : b.days_until + ' days'}</span>` : b.days_until + ' days'}</td>
+      <td><button class="btn" onclick="openCardDesigner('${emailAttr}', '${nameAttr}', ${b.turning_age})">🎂 Design Card</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- Phase 44: Greeting Card Designer (native canvas compositor) ----------
+// Built native (not a live Canva API call) so text/icon/photo customization
+// works reliably in this shipped static site with no external account or
+// server-held credentials required at runtime -- see the comment above the
+// modal markup for why, and the two real Canva-designed alternatives linked
+// there for a fully hand-finished option.
+const CARD_TEMPLATES = [
+  { name: 'Sunny Pastel', bg: ['#FEF3C7', '#BBF7D0'], accent: '#F59E0B', corners: ['🎈','🎉','✨','🎊'] },
+  { name: 'Clay Bear Bash', bg: ['#FBCFE8', '#BFDBFE'], accent: '#DB2777', corners: ['🧸','🎂','⭐','🎁'] },
+  { name: 'Meadow Friends', bg: ['#D9F99D', '#A7F3D0'], accent: '#16A34A', corners: ['🦊','🐰','🌈','🍰'] },
+];
+const CARD_ICONS = ['🎂','🎉','🎈','🎁','⭐','🌈','🦁','🐰','🦊','🐶','🐱','🐻','🎀','✨','🍰','🧸'];
+
+let cardState = { templateIdx: 0, icon: '🎂', photoImg: null, photoDataUrl: null, email: '', childName: '', turningAge: null };
+
+function openCardDesigner(email, childName, turningAge) {
+  cardState = { templateIdx: 0, icon: '🎂', photoImg: null, photoDataUrl: null, email, childName, turningAge };
+  document.getElementById('cardHeadline').value = `Happy Birthday, ${childName || 'there'}!`;
+  document.getElementById('cardMessage').value = turningAge != null
+    ? `Wishing you a wonderful ${turningAge}${ordinalSuffix(turningAge)} birthday, full of fun and learning with GrowingSeeds!`
+    : 'Wishing you a wonderful birthday, full of fun and learning with GrowingSeeds!';
+  document.getElementById('cardPhotoInput').value = '';
+  document.getElementById('cardSaveMsg').textContent = '';
+  renderTemplateSwatches();
+  renderIconPicker();
+  drawCardCanvas();
+  document.getElementById('cardDesignerModal').classList.add('active');
+}
+function closeCardDesigner() {
+  document.getElementById('cardDesignerModal').classList.remove('active');
+}
+function ordinalSuffix(n) {
+  const j = n % 10, k = n % 100;
+  if (j === 1 && k !== 11) return 'st';
+  if (j === 2 && k !== 12) return 'nd';
+  if (j === 3 && k !== 13) return 'rd';
+  return 'th';
+}
+
+function renderTemplateSwatches() {
+  const el = document.getElementById('templateSwatches');
+  el.innerHTML = CARD_TEMPLATES.map((t, i) => `
+    <div class="template-swatch ${i === cardState.templateIdx ? 'selected' : ''}"
+         style="background: linear-gradient(160deg, ${t.bg[0]}, ${t.bg[1]});"
+         title="${escapeHtml(t.name)}" onclick="selectTemplate(${i})"></div>
+  `).join('');
+}
+function selectTemplate(i) {
+  cardState.templateIdx = i;
+  renderTemplateSwatches();
+  drawCardCanvas();
+}
+function renderIconPicker() {
+  const el = document.getElementById('iconPicker');
+  el.innerHTML = CARD_ICONS.map(ic => `
+    <button type="button" class="${ic === cardState.icon ? 'selected' : ''}" onclick="selectIcon('${ic}')">${ic}</button>
+  `).join('');
+}
+function selectIcon(ic) {
+  cardState.icon = ic;
+  renderIconPicker();
+  drawCardCanvas();
+}
+
+function onCardPhotoSelected(evt) {
+  const file = evt.target.files && evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => { cardState.photoImg = img; cardState.photoDataUrl = reader.result; drawCardCanvas(); };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = String(text || '').split(/\s+/);
+  let line = '';
+  const lines = [];
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+  return lines.length;
+}
+
+function drawCardCanvas() {
+  const canvas = document.getElementById('cardCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const tpl = CARD_TEMPLATES[cardState.templateIdx];
+
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, tpl.bg[0]);
+  grad.addColorStop(1, tpl.bg[1]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Soft rounded "clay" card panel, matching the app's own visual style.
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  roundRect(ctx, 24, 24, W - 48, H - 48, 28);
+  ctx.fill();
+
+  // Corner decorations.
+  ctx.font = '40px sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText(tpl.corners[0], 36, 36);
+  ctx.textAlign = 'right';
+  ctx.fillText(tpl.corners[1], W - 36, 36);
+  ctx.textAlign = 'left';
+  ctx.fillText(tpl.corners[2], 36, H - 90);
+  ctx.textAlign = 'right';
+  ctx.fillText(tpl.corners[3], W - 36, H - 90);
+  ctx.textAlign = 'left';
+
+  // Photo circle (or accent icon if no photo imported).
+  const cx = W / 2, cy = 210, r = 130;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.clip();
+  if (cardState.photoImg) {
+    const img = cardState.photoImg;
+    const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
+    const iw = img.width * scale, ih = img.height * scale;
+    ctx.drawImage(img, cx - iw / 2, cy - ih / 2, iw, ih);
+  } else {
+    ctx.font = '120px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cardState.icon, cx, cy + 10);
+  }
+  ctx.restore();
+  ctx.strokeStyle = tpl.accent;
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Accent icon badge (always shown, even with a photo, bottom-right of the circle).
+  ctx.font = '46px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.75, cy + r * 0.65, 32, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.fillText(cardState.icon, cx + r * 0.75, cy + r * 0.65 + 3);
+
+  // Headline.
+  ctx.fillStyle = tpl.accent;
+  ctx.font = '700 44px -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const headline = document.getElementById('cardHeadline').value || 'Happy Birthday!';
+  wrapCanvasText(ctx, headline, cx, 410, W - 100, 50);
+
+  // Message.
+  ctx.fillStyle = '#374151';
+  ctx.font = '400 24px -apple-system, "Segoe UI", Roboto, sans-serif';
+  const message = document.getElementById('cardMessage').value || '';
+  wrapCanvasText(ctx, message, cx, 500, W - 140, 34);
+
+  // Footer.
+  ctx.fillStyle = '#9CA3AF';
+  ctx.font = '600 16px -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('with love from GrowingSeeds 🌱', cx, H - 46);
+
+  ctx.textAlign = 'left';
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Redraw live as text fields change.
+document.addEventListener('DOMContentLoaded', () => {
+  ['cardHeadline', 'cardMessage'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', drawCardCanvas);
+  });
+});
+
+async function saveAndDownloadCard() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const msgEl = document.getElementById('cardSaveMsg');
+  msgEl.textContent = 'Saving…';
+  let photoUrl = null;
+  try {
+    if (cardState.photoDataUrl) {
+      const blob = await (await fetch(cardState.photoDataUrl)).blob();
+      const ext = blob.type === 'image/png' ? 'png' : (blob.type === 'image/webp' ? 'webp' : 'jpg');
+      const path = `${cssId(cardState.email)}/${Date.now()}.${ext}`;
+      const { error: upErr } = await getClient().storage.from('greeting-card-photos').upload(path, blob, { upsert: true, contentType: blob.type });
+      if (!upErr) {
+        const { data: pub } = getClient().storage.from('greeting-card-photos').getPublicUrl(path);
+        photoUrl = pub.publicUrl;
+      }
+    }
+    await getClient().rpc('admin_log_greeting_card', {
+      p_admin_token: token,
+      p_user_email: cardState.email,
+      p_child_name: cardState.childName,
+      p_template_used: CARD_TEMPLATES[cardState.templateIdx].name,
+      p_headline: document.getElementById('cardHeadline').value,
+      p_message_text: document.getElementById('cardMessage').value,
+      p_photo_url: photoUrl,
+    });
+    msgEl.textContent = '✅ Logged to this family\'s CRM history.';
+  } catch (e) {
+    msgEl.textContent = "Saved locally -- couldn't log to CRM history (check your connection).";
+  }
+
+  const canvas = document.getElementById('cardCanvas');
+  const link = document.createElement('a');
+  link.download = `growingseeds-birthday-card-${cssId(cardState.childName || cardState.email)}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+(function init() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) { showScreen('dashScreen'); loadCustomers(); }
+  else { showScreen('loginScreen'); }
+})();
+</script>
+</body>
+</html>
