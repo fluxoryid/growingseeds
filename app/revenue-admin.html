@@ -69,6 +69,14 @@
   [hidden] { display: none !important; }
   .loading-row td { text-align: center; color: var(--muted); padding: 30px; }
   .section-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; color: var(--ink); }
+  /* Phase 47: logout confirmation (same Yes/No scheme as Order Verification) */
+  .confirm-modal-backdrop { position: fixed; inset: 0; background: rgba(17,24,39,0.55); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60; }
+  .confirm-modal-backdrop.active { display: flex; }
+  .confirm-modal { background: #fff; border-radius: 14px; max-width: 360px; width: 100%; padding: 24px; text-align: center; }
+  .confirm-modal h3 { margin: 0 0 8px; font-size: 17px; }
+  .confirm-modal p { margin: 0 0 18px; }
+  .confirm-modal .btn-row { display: flex; gap: 10px; }
+  .confirm-modal .btn-row .btn { flex: 1; }
 </style>
 </head>
 <body>
@@ -93,6 +101,7 @@
     <div class="field"><label>New password</label><input type="password" id="newPassword1" autocomplete="new-password"></div>
     <div class="field"><label>Confirm new password</label><input type="password" id="newPassword2" autocomplete="new-password"></div>
     <button class="btn" style="width:100%;" id="changePwBtn" onclick="doChangePassword()">Set Password &amp; Continue</button>
+    <button class="btn secondary" style="width:100%; margin-top:8px;" id="changePwCancelBtn" onclick="cancelChangePassword()" hidden>Cancel</button>
   </div>
 </div>
 
@@ -101,7 +110,8 @@
     <h1>💰 <span>Revenue</span> Dashboard</h1>
     <div>
       <button class="btn secondary" onclick="loadRevenue()">↻ Refresh</button>
-      <button class="btn secondary" onclick="doLogout()">Log Out</button>
+      <button class="btn secondary" onclick="openChangePassword()">Change Password</button>
+      <button class="btn secondary" onclick="requestLogout()">Log Out</button>
     </div>
   </div>
   <div class="wrap">
@@ -121,6 +131,22 @@
         <thead><tr><th>Month</th><th>Collected</th><th>Fulfilled</th><th>Pending</th><th>Cancelled</th><th style="width:140px;">Trend</th></tr></thead>
         <tbody id="monthlyRows"><tr class="loading-row"><td colspan="6">Loading…</td></tr></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 47: Log Out confirmation, same Yes/No scheme as Order Verification
+     and CRM Admin -- "No, stay" cancels; "Yes, log out" proceeds. Revenue
+     Admin is read-only (no forms that write data), so there is no
+     in-flight save to wait for here, but the confirm step itself matches
+     the other two admin tools for consistency. -->
+<div class="confirm-modal-backdrop" id="logoutConfirmModal">
+  <div class="confirm-modal">
+    <h3>Log out of Revenue Admin?</h3>
+    <p class="hint">You'll need to sign in again to see revenue data.</p>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="cancelLogout()">No, stay</button>
+      <button class="btn" id="confirmLogoutBtn" style="background:var(--danger);" onclick="confirmLogout()">Yes, log out</button>
     </div>
   </div>
 </div>
@@ -160,6 +186,7 @@ function setError(elId, msg) {
 }
 
 let pendingEmail = null;
+let pendingIsForced = false; // Phase 47: true only for the mandatory first-login change
 
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -177,6 +204,9 @@ async function doLogin() {
     const row = Array.isArray(data) ? data[0] : data;
     if (row.must_change_password) {
       pendingEmail = email;
+      pendingIsForced = true;
+      document.getElementById('changePwCancelBtn').hidden = true;
+      document.querySelector('#changePwScreen .hint').textContent = 'First login requires setting your own password.';
       showScreen('changePwScreen');
       return;
     }
@@ -189,6 +219,26 @@ async function doLogin() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Phase 47: "Change Password" button on the dashboard, available any time
+// after a successful login -- not just the forced first-login flow. Same
+// screen/RPC as first-login; only difference is a Cancel button back to
+// the dashboard, shown here and hidden during the mandatory first change.
+function openChangePassword() {
+  pendingEmail = sessionStorage.getItem(EMAIL_KEY);
+  pendingIsForced = false;
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword1').value = '';
+  document.getElementById('newPassword2').value = '';
+  setError('changePwError', null);
+  document.getElementById('changePwCancelBtn').hidden = false;
+  document.querySelector('#changePwScreen .hint').textContent = 'Update your password below.';
+  showScreen('changePwScreen');
+}
+function cancelChangePassword() {
+  setError('changePwError', null);
+  showScreen('dashScreen');
 }
 
 async function doChangePassword() {
@@ -226,6 +276,19 @@ function doLogout() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(EMAIL_KEY);
   showScreen('loginScreen');
+}
+
+// Phase 47: Log Out now confirms first, same Yes/No scheme as Order
+// Verification and CRM Admin.
+function requestLogout() {
+  document.getElementById('logoutConfirmModal').classList.add('active');
+}
+function cancelLogout() {
+  document.getElementById('logoutConfirmModal').classList.remove('active');
+}
+function confirmLogout() {
+  document.getElementById('logoutConfirmModal').classList.remove('active');
+  doLogout();
 }
 
 function formatIdr(n) {

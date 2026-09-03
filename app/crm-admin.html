@@ -57,24 +57,21 @@
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   th { text-align: left; padding: 8px 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 1px solid var(--line); }
   td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  tr.customer-row { cursor: pointer; }
-  tr.customer-row:hover { background: #FAFAFB; }
   .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
   .badge-active { background: #DCFCE7; color: #166534; }
   .badge-expired { background: #FEE2E2; color: #991B1B; }
   .badge-none { background: #F3F4F6; color: #6B7280; }
   .searchbar { margin-bottom: 14px; }
   .searchbar input { width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
-  .notes-panel { display: none; background: #FAFAFB; border-top: 1px dashed var(--line); }
-  .notes-panel.open { display: table-row; }
-  .notes-panel td { padding: 14px 10px; }
-  .note-item { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; }
-  .note-item .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
-  .tag-chip { display: inline-block; background: #EDE9FE; color: var(--brand-dark); font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: 6px; }
-  .note-form { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .note-form input[type=text] { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
-  .note-form input.tag-input { flex: 0 0 120px; }
   [hidden] { display: none !important; }
+  /* Phase 47: logout confirmation (same Yes/No scheme as Order Verification) */
+  .confirm-modal-backdrop { position: fixed; inset: 0; background: rgba(17,24,39,0.55); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60; }
+  .confirm-modal-backdrop.active { display: flex; }
+  .confirm-modal { background: #fff; border-radius: 14px; max-width: 360px; width: 100%; padding: 24px; text-align: center; }
+  .confirm-modal h3 { margin: 0 0 8px; font-size: 17px; }
+  .confirm-modal p { margin: 0 0 18px; }
+  .confirm-modal .btn-row { display: flex; gap: 10px; }
+  .confirm-modal .btn-row .btn { flex: 1; }
   .loading-row td { text-align: center; color: var(--muted); padding: 30px; }
   /* Phase 44: Customer Report / Upcoming Birthdays / Greeting Card Designer */
   .tabbar { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -129,6 +126,7 @@
     <div class="field"><label>New password</label><input type="password" id="newPassword1" autocomplete="new-password"></div>
     <div class="field"><label>Confirm new password</label><input type="password" id="newPassword2" autocomplete="new-password"></div>
     <button class="btn" style="width:100%;" id="changePwBtn" onclick="doChangePassword()">Set Password &amp; Continue</button>
+    <button class="btn secondary" style="width:100%; margin-top:8px;" id="changePwCancelBtn" onclick="cancelChangePassword()" hidden>Cancel</button>
   </div>
 </div>
 
@@ -137,7 +135,8 @@
     <h1>🗂️ <span>CRM</span> — Customer Directory</h1>
     <div>
       <button class="btn secondary" onclick="loadCustomers()">↻ Refresh</button>
-      <button class="btn secondary" onclick="doLogout()">Log Out</button>
+      <button class="btn secondary" onclick="openChangePassword()">Change Password</button>
+      <button class="btn secondary" onclick="requestLogout()">Log Out</button>
     </div>
   </div>
   <div class="wrap">
@@ -156,11 +155,11 @@
         <table>
           <thead>
             <tr>
-              <th>Customer</th><th>Plan</th><th>License</th><th>Total Paid</th><th>Signed Up</th><th>Notes</th>
+              <th>Customer</th><th>Plan</th><th>License</th><th>Total Paid</th><th>Signed Up</th>
             </tr>
           </thead>
           <tbody id="customerRows">
-            <tr class="loading-row"><td colspan="6">Loading…</td></tr>
+            <tr class="loading-row"><td colspan="5">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -266,6 +265,22 @@
   </div>
 </div>
 
+<!-- Phase 47: Log Out confirmation, same Yes/No scheme as the Order
+     Verification admin panel -- "No, stay" cancels with no side effects;
+     "Yes, log out" waits for any in-flight save (e.g. a greeting-card save
+     still in progress) to finish before actually signing out, so a stray
+     tap can never lose work that was already underway. -->
+<div class="confirm-modal-backdrop" id="logoutConfirmModal">
+  <div class="confirm-modal">
+    <h3>Log out of CRM Admin?</h3>
+    <p class="hint">Any save already in progress will finish first, then you'll be signed out.</p>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="cancelLogout()">No, stay</button>
+      <button class="btn" id="confirmLogoutBtn" style="background:var(--danger);" onclick="confirmLogout()">Yes, log out</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const SUPABASE_URL = 'https://bcdlprxdipyyzbcbvkjn.supabase.co';
@@ -323,6 +338,7 @@ function setError(elId, msg) {
 
 let pendingEmail = null;
 let pendingOldHash = null;
+let pendingIsForced = false; // Phase 47: true only for the mandatory first-login change
 
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
@@ -344,6 +360,9 @@ async function doLogin() {
     if (row.must_change_password) {
       pendingEmail = email;
       pendingOldHash = hash;
+      pendingIsForced = true;
+      document.getElementById('changePwCancelBtn').hidden = true;
+      document.querySelector('#changePwScreen .hint').textContent = 'First login requires setting your own password.';
       showScreen('changePwScreen');
       return;
     }
@@ -356,6 +375,29 @@ async function doLogin() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// Phase 47: "Change Password" button on the dashboard, available any time
+// after a successful login -- not just the forced first-login flow. Reuses
+// the same changePwScreen/RPC as first-login (doChangePassword() already
+// re-hashes the typed current password itself, ignoring pendingOldHash, so
+// nothing about that screen needed to change to support this second entry
+// point). Only difference: a Cancel button back to the dashboard, shown
+// here and hidden during the mandatory first-login change.
+function openChangePassword() {
+  pendingEmail = sessionStorage.getItem(EMAIL_KEY);
+  pendingIsForced = false;
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword1').value = '';
+  document.getElementById('newPassword2').value = '';
+  setError('changePwError', null);
+  document.getElementById('changePwCancelBtn').hidden = false;
+  document.querySelector('#changePwScreen .hint').textContent = 'Update your password below.';
+  showScreen('changePwScreen');
+}
+function cancelChangePassword() {
+  setError('changePwError', null);
+  showScreen('dashScreen');
 }
 
 async function doChangePassword() {
@@ -395,6 +437,32 @@ function doLogout() {
   showScreen('loginScreen');
 }
 
+// Phase 47: Log Out now confirms first, same Yes/No scheme as Order
+// Verification. __pendingSavePromise (set by saveAndDownloadCard below)
+// tracks a greeting-card save still in flight -- "Yes, log out" awaits it
+// before actually signing out, so a save already underway always finishes
+// and is never silently abandoned by a stray tap.
+let __pendingSavePromise = null;
+function requestLogout() {
+  document.getElementById('logoutConfirmModal').classList.add('active');
+}
+function cancelLogout() {
+  document.getElementById('logoutConfirmModal').classList.remove('active');
+}
+async function confirmLogout() {
+  const btn = document.getElementById('confirmLogoutBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    if (__pendingSavePromise) await __pendingSavePromise.catch(() => {});
+  } finally {
+    document.getElementById('logoutConfirmModal').classList.remove('active');
+    btn.disabled = false;
+    btn.textContent = 'Yes, log out';
+    doLogout();
+  }
+}
+
 const PLAN_DAYS = { monthly: 30, annually: 365 };
 function computeLicenseBadge(row) {
   if (!row.license_activated_at) return { label: 'Not Issued', cls: 'badge-none' };
@@ -411,13 +479,12 @@ function formatIdr(n) {
 }
 
 let allCustomers = [];
-let openNoteRow = null;
 
 async function loadCustomers() {
   setError('dashError', null);
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (!token) { showScreen('loginScreen'); return; }
-  document.getElementById('customerRows').innerHTML = '<tr class="loading-row"><td colspan="6">Loading…</td></tr>';
+  document.getElementById('customerRows').innerHTML = '<tr class="loading-row"><td colspan="5">Loading…</td></tr>';
   try {
     const { data, error } = await getClient().rpc('admin_list_customers', { p_admin_token: token });
     if (error) {
@@ -439,86 +506,25 @@ function renderCustomers() {
   );
   const tbody = document.getElementById('customerRows');
   if (!rows.length) {
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="6">No customers found.</td></tr>';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="5">No customers found.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((c, i) => {
     const lic = computeLicenseBadge(c);
     const plan = c.latest_plan ? (c.latest_plan === 'monthly' ? 'Monthly' : 'Annually') : '—';
     const signup = c.created_at ? new Date(c.created_at).toLocaleDateString('id-ID') : '—';
-    const emailAttr = escapeJsAttr(c.user_email);
     return `
-    <tr class="customer-row" onclick="toggleNotes('${emailAttr}')">
+    <tr>
       <td><b>${escapeHtml(c.child_name) || '(no name)'}</b><br><span style="color:var(--muted); font-size:12px;">${escapeHtml(c.user_email)}</span></td>
       <td>${plan}</td>
       <td><span class="badge ${lic.cls}">${lic.label}</span></td>
       <td>${formatIdr(c.total_paid_idr)}</td>
       <td>${signup}</td>
-      <td>${c.note_count > 0 ? c.note_count : '—'}</td>
-    </tr>
-    <tr class="notes-panel" id="notes-${cssId(c.user_email)}">
-      <td colspan="6">
-        <div id="notesList-${cssId(c.user_email)}">Loading notes…</div>
-        <div class="note-form">
-          <input type="text" class="tag-input" placeholder="Tag (optional)" id="tagInput-${cssId(c.user_email)}">
-          <input type="text" placeholder="Add a note about this family…" id="noteInput-${cssId(c.user_email)}">
-          <button class="btn" onclick="event.stopPropagation(); addNote('${emailAttr}')">Add Note</button>
-        </div>
-      </td>
     </tr>`;
   }).join('');
 }
 
 function cssId(email) { return email.replace(/[^a-zA-Z0-9]/g, '_'); }
-
-async function toggleNotes(email) {
-  const rowId = 'notes-' + cssId(email);
-  const el = document.getElementById(rowId);
-  const isOpen = el.classList.contains('open');
-  document.querySelectorAll('.notes-panel.open').forEach(p => p.classList.remove('open'));
-  if (isOpen) { openNoteRow = null; return; }
-  el.classList.add('open');
-  openNoteRow = email;
-  await loadNotes(email);
-}
-
-async function loadNotes(email) {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  const listEl = document.getElementById('notesList-' + cssId(email));
-  try {
-    const { data, error } = await getClient().rpc('admin_list_customer_notes', { p_admin_token: token, p_user_email: email });
-    if (error) { listEl.textContent = "Couldn't load notes."; return; }
-    if (!data || !data.length) { listEl.innerHTML = '<div class="hint">No notes yet.</div>'; return; }
-    listEl.innerHTML = data.map(n => `
-      <div class="note-item">
-        ${escapeHtml(n.note_text)}${n.tag ? `<span class="tag-chip">${escapeHtml(n.tag)}</span>` : ''}
-        <div class="meta">${escapeHtml(n.created_by)} · ${new Date(n.created_at).toLocaleString('id-ID')}</div>
-      </div>
-    `).join('');
-  } catch (e) {
-    listEl.textContent = "Couldn't load notes.";
-  }
-}
-
-async function addNote(email) {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  const noteInput = document.getElementById('noteInput-' + cssId(email));
-  const tagInput = document.getElementById('tagInput-' + cssId(email));
-  const text = noteInput.value.trim();
-  if (!text) return;
-  try {
-    const { error } = await getClient().rpc('admin_add_customer_note', {
-      p_admin_token: token, p_user_email: email, p_note: text, p_tag: tagInput.value.trim() || null
-    });
-    if (error) { alert("Couldn't save the note -- please try again."); return; }
-    noteInput.value = '';
-    tagInput.value = '';
-    await loadNotes(email);
-    loadCustomers();
-  } catch (e) {
-    alert("Couldn't save the note -- please try again.");
-  }
-}
 
 // ---------- Phase 44: tabs ----------
 let reportLoaded = false;
@@ -817,7 +823,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-async function saveAndDownloadCard() {
+// Phase 47: wrapped so a Log Out click mid-save (see __pendingSavePromise
+// above) can wait for this to settle instead of abandoning it.
+function saveAndDownloadCard() {
+  __pendingSavePromise = _doSaveCard();
+  __pendingSavePromise.finally(() => { __pendingSavePromise = null; });
+}
+async function _doSaveCard() {
   const token = sessionStorage.getItem(TOKEN_KEY);
   const msgEl = document.getElementById('cardSaveMsg');
   msgEl.textContent = 'Saving…';
