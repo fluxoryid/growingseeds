@@ -431,7 +431,14 @@ async function doChangePassword() {
 
 function doLogout() {
   const token = sessionStorage.getItem(TOKEN_KEY);
-  if (token) getClient().rpc('business_admin_logout', { p_admin_token: token, p_role: ROLE }).catch(() => {});
+  // Fixed: real supabase-js's .rpc() builder implements .then() but not a
+  // bare .catch() -- calling .catch() directly threw "catch is not a
+  // function" and aborted this function before the session was cleared or
+  // the screen switched, so Log Out silently did nothing in production
+  // (invisible to prior QA, which mocked the client with plain Promises
+  // that always have .catch). .then(onFulfilled, onRejected) is safe
+  // regardless of the builder's exact shape.
+  if (token) getClient().rpc('business_admin_logout', { p_admin_token: token, p_role: ROLE }).then(() => {}, () => {});
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(EMAIL_KEY);
   showScreen('loginScreen');

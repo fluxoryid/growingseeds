@@ -11682,7 +11682,13 @@ function confirmAdminLogout() {
 function adminLogout() {
   const token = (() => { try { return sessionStorage.getItem(GS_ADMIN_TOKEN_KEY); } catch (e) { return null; } })();
   const client = getGsSupabaseClient();
-  if (client && token) client.rpc('admin_logout', { p_admin_token: token }).catch(() => {});
+  // Fixed: the real supabase-js query-builder returned by .rpc() implements
+  // .then() but NOT a bare .catch() -- calling .catch() directly on it threw
+  // "catch is not a function" and aborted this function before the session
+  // was ever cleared, so Log Out silently did nothing. .then(onFulfilled,
+  // onRejected) is always safe since .then() is the one method every
+  // Promise/A+ thenable is guaranteed to implement.
+  if (client && token) client.rpc('admin_logout', { p_admin_token: token }).then(() => {}, () => {});
   try {
     localStorage.removeItem(GS_ADMIN_EMAIL_KEY);
     sessionStorage.removeItem(GS_ADMIN_TOKEN_KEY);
