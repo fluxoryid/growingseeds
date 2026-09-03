@@ -56,6 +56,17 @@
   .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
   .error-box { background: #FEF2F2; color: var(--danger); border: 1px solid #FECACA; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; display: none; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  /* Phase 48: GrowingSeeds branding header (logo + greeting + live date/time)
+     on the login screen and inside the dashboard module, per client request. */
+  .gs-login-brand { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 18px; }
+  .gs-login-brand img { height: 56px; width: auto; margin-bottom: 10px; }
+  .gs-login-brand .gs-greeting { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .gs-login-brand .gs-datetime { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .gs-dash-brand { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .gs-dash-brand img { height: 32px; width: auto; flex-shrink: 0; }
+  .gs-dash-brand .gs-brand-text { line-height: 1.35; }
+  .gs-dash-brand .gs-greeting { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .gs-dash-brand .gs-datetime { font-size: 11.5px; color: var(--muted); }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
   .stat-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
   .stat-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
@@ -82,11 +93,16 @@
 <body>
 
 <div id="loginScreen" class="center-wrap">
+  <div class="gs-login-brand">
+    <img src="assets/images/growingseeds_logo.png" alt="GrowingSeeds">
+    <div class="gs-greeting" id="loginGreeting">Welcome</div>
+    <div class="gs-datetime" id="loginDateTime"></div>
+  </div>
   <div class="card">
     <h2 style="margin-top:0;">💰 Revenue Admin</h2>
     <p class="hint" style="margin-bottom:16px;">GrowingSeeds business tool. Not part of the child-facing app.</p>
     <div class="error-box" id="loginError"></div>
-    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username"></div>
+    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username" oninput="updateLoginGreeting()"></div>
     <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
     <button class="btn" style="width:100%;" id="loginBtn" onclick="doLogin()">Log In</button>
   </div>
@@ -106,6 +122,13 @@
 </div>
 
 <div id="dashScreen" hidden>
+  <div class="gs-dash-brand">
+    <img src="assets/images/growingseeds_logo.png" alt="GrowingSeeds">
+    <div class="gs-brand-text">
+      <div class="gs-greeting" id="dashGreeting">Greetings</div>
+      <div class="gs-datetime" id="dashDateTime"></div>
+    </div>
+  </div>
   <div class="topbar">
     <h1>💰 <span>Revenue</span> Dashboard</h1>
     <div>
@@ -177,6 +200,10 @@ function showScreen(id) {
   ['loginScreen', 'changePwScreen', 'dashScreen'].forEach(s => {
     document.getElementById(s).hidden = (s !== id);
   });
+  // Phase 48: refresh the brand-header greeting the instant a screen becomes
+  // active, rather than waiting for the next 1s clock tick.
+  if (id === 'dashScreen' && typeof updateDashGreeting === 'function') updateDashGreeting();
+  if (id === 'loginScreen' && typeof updateLoginGreeting === 'function') updateLoginGreeting();
 }
 function setError(elId, msg) {
   const el = document.getElementById(elId);
@@ -365,7 +392,36 @@ function renderStats(stats) {
   document.getElementById('monthlyRows').innerHTML = rowsHtml;
 }
 
+// Phase 48: GrowingSeeds branding header (logo + greeting + live date/time)
+// on the login screen and inside the dashboard module, per client request.
+function gsFormatNow() {
+  const d = new Date();
+  return d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+    + ' — ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function updateLoginGreeting() {
+  const el = document.getElementById('loginGreeting');
+  if (!el) return;
+  const emailEl = document.getElementById('loginEmail');
+  const typed = emailEl ? emailEl.value.trim() : '';
+  el.textContent = typed ? ('Greetings, ' + typed) : 'Welcome';
+}
+function updateDashGreeting() {
+  const el = document.getElementById('dashGreeting');
+  if (!el) return;
+  const email = sessionStorage.getItem(EMAIL_KEY);
+  el.textContent = email ? ('Greetings, ' + email) : 'Greetings';
+}
+function gsTickBrandClocks() {
+  const now = gsFormatNow();
+  const a = document.getElementById('loginDateTime'); if (a) a.textContent = now;
+  const b = document.getElementById('dashDateTime'); if (b) b.textContent = now;
+  updateDashGreeting();
+}
+setInterval(gsTickBrandClocks, 1000);
+
 (function init() {
+  gsTickBrandClocks();
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) { showScreen('dashScreen'); loadRevenue(); }
   else { showScreen('loginScreen'); }
